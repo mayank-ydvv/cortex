@@ -1,0 +1,24 @@
+[
+  {
+    "id": "g1",
+    "query": "what did we decide about auth last week?",
+    "category": "time-scoped",
+    "now": "2026-09-20T00:00:00+05:30",
+    "expected_source_ids": [],
+    "notes": "time-scoped; must return the recent JWT decision and NOT the March session-cookie thread"
+  },
+  {
+    "id": "g2",
+    "query": "hnsw.iterative_scan",
+    "category": "exact-term",
+    "expected_source_ids": [],
+    "notes": "exact-term; the chunk literally naming the setting must outrank chunks merely discussing indexes"
+  },
+  {
+    "id": "g3",
+    "query": "how should we handle user sessions",
+    "category": "conceptual",
+    "expected_source_ids": [],
+    "notes": "conceptual; no exact term overlap, vector leg should carry this"
+  }
+]
