@@ -140,3 +140,33 @@ conversation's `started_at` — never `now()`. Using import time silently breaks
 time-scoped query, and it breaks it *invisibly*: the rows are there, the search runs,
 the answers are just quietly wrong. Ingest reports how many timestamps were inherited
 for exactly this reason.
+
+## Verification status
+
+The core requirement was proven against the live database on 2026-09-20, using
+fixtures with exact synthetic vector geometry so the expected ranking was known
+rather than approximated:
+
+| Query: auth direction | Rank 1 | Rank 2 |
+|---|---|---|
+| no date filter | **fx-auth-march (2026-03-12)** | fx-auth-lastweek |
+| `"last week"` filter | fx-auth-lastweek (2026-09-17) | fx-auth-thursday (2026-09-17) |
+
+Unfiltered, the stale March decision ranks first — the exact "confidently wrong"
+failure this system exists to prevent. The date filter removes it.
+
+Both 2026-09-17 chunks survive the filter. A strict Mon–Sun reading of "last week"
+would have excluded them and returned no auth content at all, so the generous range
+is load-bearing rather than cosmetic.
+
+Also verified live: generated `tsvector` populating with correct stemming, all six
+indexes present, `hnsw.iterative_scan` accepted as `relaxed_order`, FK cascade
+deleting chunks with their source, and RLS enabled with zero policies on all three
+tables (denies the public PostgREST API; the app connects as table owner and
+bypasses it).
+
+Embedding semantics were verified separately and locally: 0.61 cosine for a matching
+auth passage versus 0.37 for an unrelated one.
+
+Not yet verified end to end through the TypeScript CLIs — that needs `DATABASE_URL`
+in `.env`.
