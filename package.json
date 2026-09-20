@@ -11,9 +11,10 @@
     "ingest": "tsx src/cli/ingest.ts",
     "search": "tsx src/cli/search.ts",
     "seed:fixtures": "tsx src/cli/seed.ts",
-    "test": "vitest run",
+    "test": "tsc --noEmit && vitest run",
     "test:watch": "vitest",
-    "test:golden": "tsx src/cli/golden.ts"
+    "test:golden": "tsx src/cli/golden.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.0",

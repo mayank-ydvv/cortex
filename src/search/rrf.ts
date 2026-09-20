@@ -63,7 +63,7 @@ export function fuse(lists: RankedHit[][], k: number = DEFAULT_K): FusedHit[] {
       }
       // A document should not appear twice in one list; if it does, keep the
       // better rank rather than double-counting it.
-      const existing = entry.ranks[listIndex];
+      const existing = entry.ranks[listIndex] ?? null;
       if (existing !== null && existing <= hit.rank) continue;
       if (existing !== null) entry.score -= 1 / (k + existing);
 
