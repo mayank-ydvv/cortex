@@ -97,3 +97,21 @@ CREATE INDEX IF NOT EXISTS chunks_occurred_at_idx
 CREATE INDEX IF NOT EXISTS chunks_source_id_idx    ON chunks (source_id);
 CREATE INDEX IF NOT EXISTS sources_started_at_idx  ON sources (started_at DESC);
 CREATE INDEX IF NOT EXISTS memories_decided_at_idx ON memories (decided_at DESC);
+
+-- ---------------------------------------------------------------------------
+-- Row level security.
+--
+-- This database is reachable through Supabase's auto-generated PostgREST API.
+-- Without RLS, anyone holding the project's anon key could read the entire
+-- corpus -- which here means every conversation the owner has ever had.
+--
+-- RLS is enabled with NO policies, which denies all access through PostgREST.
+-- The application connects directly as the table owner, and owners bypass RLS,
+-- so the CLI and local UI are unaffected.
+--
+-- If this ever moves behind a deployed app with real users, these tables need
+-- actual policies. Enabling RLS without policies is a lock, not an auth model.
+-- ---------------------------------------------------------------------------
+ALTER TABLE sources  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chunks   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE memories ENABLE ROW LEVEL SECURITY;
