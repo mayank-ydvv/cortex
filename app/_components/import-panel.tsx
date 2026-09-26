@@ -71,7 +71,7 @@ export function ImportPanel({ initialPending }: { initialPending: number }) {
             type="file"
             name="files"
             multiple
-            accept=".md,.markdown,.txt,.json,application/json,text/markdown,text/plain"
+            accept=".md,.markdown,.txt,.json,.zip,application/json,application/zip,text/markdown,text/plain"
             aria-label="Files to import"
             disabled={isUploading || embedding}
           />
@@ -88,9 +88,10 @@ export function ImportPanel({ initialPending }: { initialPending: number }) {
           </button>
         </div>
         <p className="import-hint">
-          Markdown and text notes import directly. A Claude or ChatGPT{' '}
-          <code>.json</code> export is not parsed yet — upload it and this will print its real
-          structure, which is what the parser has to be written against.
+          Notes (<code>.md</code>, <code>.txt</code>) import directly. Drop in your Claude{' '}
+          <code>manifest.json</code> and the conversations archive is downloaded and opened for
+          you; if those links need your browser session, download the{' '}
+          <code>.zip</code> yourself and drop that in instead — it gets unzipped here either way.
         </p>
       </form>
 
@@ -169,6 +170,35 @@ function ImportReport({ result }: { result: ImportResult }) {
               {f.name}
             </div>
             <p>{f.message}</p>
+            {f.hint && (
+              <p style={{ marginTop: 4, color: 'var(--muted-deep)' }}>{f.hint}</p>
+            )}
+            {f.savedTo && (
+              <p style={{ marginTop: 4, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--accent)' }}>
+                saved to {f.savedTo} — the download link is single use, so the file is kept
+              </p>
+            )}
+            {f.archive && f.archive.length > 0 && (
+              <>
+                <div className="stat-label" style={{ margin: 'var(--sp-3) 0 var(--sp-1)' }}>
+                  inside the archive
+                </div>
+                <table className="data">
+                  <tbody>
+                    {f.archive.slice(0, 12).map((a) => (
+                      <tr key={a.name}>
+                        <td style={{ fontFamily: 'var(--mono)', fontSize: 11.5 }}>{a.name}</td>
+                        <td className="num" style={{ color: 'var(--muted-deep)', fontSize: 11 }}>
+                          {a.bytes >= 1048576
+                            ? `${(a.bytes / 1048576).toFixed(1)} MB`
+                            : `${Math.max(1, Math.round(a.bytes / 1024))} KB`}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
 
             {f.report?.manifest && (
               <div style={{ marginTop: 'var(--sp-3)' }}>

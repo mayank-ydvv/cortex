@@ -8,6 +8,8 @@ import {
   type IngestSummary,
 } from '../src/ingest/index';
 import { inspectJson, type DetectionReport } from '../src/ingest/parsers/detect';
+import { readArchive } from '../src/ingest/archive';
+import { ExportFetchError, fetchExport } from '../src/ingest/fetch-export';
 import { manualProject, parseManual } from '../src/ingest/parsers/manual';
 import type { ParsedConversation } from '../src/ingest/parsers/types';
 import { getEmbeddingProvider } from '../src/ingest/embed';
@@ -16,6 +18,12 @@ export interface ImportedFile {
   name: string;
   status: 'imported' | 'skipped' | 'unsupported' | 'manifest' | 'error';
   message: string;
+  /** Guidance shown under the message when a step failed recoverably. */
+  hint?: string;
+  /** Where a downloaded archive was saved, so a single-use link is never lost. */
+  savedTo?: string;
+  /** Files found inside an uploaded or fetched archive. */
+  archive?: { name: string; bytes: number }[];
   /** Present when a JSON export could not be parsed: what the file actually contains. */
   report?: DetectionReport & { sampleKeys?: string[]; sample?: string };
 }
@@ -60,6 +68,12 @@ export async function importFiles(formData: FormData): Promise<ImportResult> {
         continue;
       }
 
+      if (file.name.toLowerCase().endsWith('.zip')) {
+        const archive = readArchive(new Uint8Array(await file.arrayBuffer()));
+        files.push(describeArchive(file.name, archive, 'uploaded archive'));
+        continue;
+      }
+
       if (file.name.toLowerCase().endsWith('.json')) {
         // Deliberately not parsed. Guessing an export's shape produces a parser
         // that silently mangles timestamps, which degrades every time-scoped
@@ -70,14 +84,7 @@ export async function importFiles(formData: FormData): Promise<ImportResult> {
         // A manifest is an index of downloads, not the export itself. Saying
         // "unrecognised" here would send you hunting for a bug that is not there.
         if (report.manifest) {
-          files.push({
-            name: file.name,
-            status: 'manifest',
-            message:
-              'This is the export manifest, not your conversations. It lists the files to ' +
-              'download; the chats are inside the conversations archive.',
-            report,
-          });
+          files.push(await handleManifest(file.name, json, report));
           continue;
         }
 
@@ -206,4 +213,117 @@ export async function embedAll(): Promise<number> {
   await embedPendingChunks(sql, summary);
   revalidatePath('/status');
   return summary.embeddingsComputed;
+}
+
+
+/** Directory for downloaded archives. Kept so a single-use link is never spent twice. */
+const EXPORT_DIR = '.exports';
+
+/** Summarise an archive's contents and report the conversation file's structure. */
+function describeArchive(
+  name: string,
+  archive: ReturnType<typeof readArchive>,
+  origin: string,
+  savedTo?: string,
+): ImportedFile {
+  const listing = archive.entries.map((e) => ({ name: e.name, bytes: e.bytes }));
+
+  if (!archive.conversations?.text) {
+    return {
+      name,
+      status: 'unsupported',
+      message: `Opened the ${origin}, but found no JSON inside it.`,
+      hint: 'If this is the light_metadata, design_chats or frames archive, the one you want is the conversations archive.',
+      archive: listing,
+      savedTo,
+    };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(archive.conversations.text);
+  } catch (err) {
+    return {
+      name,
+      status: 'error',
+      message: `${archive.conversations.name} inside the ${origin} is not valid JSON.`,
+      hint: err instanceof Error ? err.message : String(err),
+      archive: listing,
+      savedTo,
+    };
+  }
+
+  const report = inspectJson(parsed);
+  const first = Array.isArray(parsed) ? parsed[0] : parsed;
+  const sample =
+    first && typeof first === 'object'
+      ? JSON.stringify(first, null, 2).slice(0, 3000)
+      : String(first).slice(0, 3000);
+
+  return {
+    name,
+    status: 'unsupported',
+    message:
+      `Opened ${archive.conversations.name} from the ${origin}. ` +
+      'No parser for this format yet — its real structure is below.',
+    hint: 'Paste the structure below into chat and the parser gets written against it.',
+    archive: listing,
+    savedTo,
+    report: { ...report, sample },
+  };
+}
+
+/**
+ * Try to complete the export automatically from its manifest.
+ *
+ * Falls back to instructions rather than failing outright, because these links
+ * are single use and may be tied to a browser session the server does not have.
+ */
+async function handleManifest(
+  name: string,
+  json: unknown,
+  report: DetectionReport,
+): Promise<ImportedFile> {
+  const manifest = report.manifest!;
+  const raw = json as { data_files?: { category?: string; filename?: string; export_url?: string }[] };
+
+  const target =
+    raw.data_files?.find((f) => f.category === 'conversations') ??
+    raw.data_files?.find((f) => /conversation/i.test(String(f.filename ?? '')));
+
+  if (!target?.export_url) {
+    return {
+      name,
+      status: 'manifest',
+      message: 'This manifest lists no conversations download.',
+      report,
+    };
+  }
+
+  try {
+    const fetched = await fetchExport(
+      target.export_url,
+      target.filename ?? 'conversations.zip',
+      EXPORT_DIR,
+    );
+    const archive = readArchive(fetched.bytes);
+    const described = describeArchive(name, archive, 'downloaded archive', fetched.savedTo);
+    return {
+      ...described,
+      message: `Downloaded ${target.filename} automatically. ${described.message}`,
+    };
+  } catch (err) {
+    const fetchErr = err instanceof ExportFetchError ? err : null;
+    return {
+      name,
+      status: 'manifest',
+      message: fetchErr
+        ? `Could not download automatically. ${fetchErr.message}`
+        : `Could not download automatically: ${err instanceof Error ? err.message : String(err)}`,
+      hint:
+        fetchErr?.hint ??
+        'Download the conversations archive in your browser and upload the .zip here instead.',
+      report,
+    };
+  }
 }
