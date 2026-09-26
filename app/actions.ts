@@ -9,9 +9,10 @@ import {
 } from '../src/ingest/index';
 import { inspectJson, type DetectionReport } from '../src/ingest/parsers/detect';
 import { readArchive } from '../src/ingest/archive';
+import { parseExport } from '../src/ingest/parsers/index';
 import { ExportFetchError, assertAllowedHost, fetchExport } from '../src/ingest/fetch-export';
 import { manualProject, parseManual } from '../src/ingest/parsers/manual';
-import type { ParsedConversation } from '../src/ingest/parsers/types';
+import type { Origin, ParsedConversation } from '../src/ingest/parsers/types';
 import { getEmbeddingProvider } from '../src/ingest/embed';
 
 export interface ImportedFile {
@@ -27,6 +28,11 @@ export interface ImportedFile {
   /** Present when a JSON export could not be parsed: what the file actually contains. */
   report?: DetectionReport & { sampleKeys?: string[]; sample?: string };
 }
+
+/** Internal: parsed conversations travel with the file record, then are stripped. */
+type PendingImport = ImportedFile & {
+  parsed?: { origin: Origin; conversations: ParsedConversation[] };
+};
 
 export interface ImportResult {
   files: ImportedFile[];
@@ -48,7 +54,7 @@ export async function importFiles(formData: FormData): Promise<ImportResult> {
   const uploads = formData.getAll('files').filter((f): f is File => f instanceof File);
   const project = (formData.get('project') as string | null)?.trim() || null;
 
-  const files: ImportedFile[] = [];
+  const files: PendingImport[] = [];
   const conversations: ParsedConversation[] = [];
   const projects = new Map<string, string | null>();
 
@@ -88,6 +94,17 @@ export async function importFiles(formData: FormData): Promise<ImportResult> {
           continue;
         }
 
+        const recognised = parseExport(json);
+        if (recognised) {
+          files.push({
+            name: file.name,
+            status: 'imported',
+            message: `Recognised as a ${recognised.origin} export.`,
+            parsed: recognised,
+          } as PendingImport);
+          continue;
+        }
+
         const first = Array.isArray(json) ? json[0] : json;
         const sample =
           first && typeof first === 'object'
@@ -120,6 +137,37 @@ export async function importFiles(formData: FormData): Promise<ImportResult> {
   let summary: IngestSummary | null = null;
   const sql = getSql();
 
+  const blank = (): IngestSummary => ({
+    sourcesInserted: 0, sourcesUpdated: 0, sourcesSkipped: 0, chunksCreated: 0,
+    embeddingsReused: 0, embeddingsComputed: 0, timestampsInherited: 0,
+    chunksAwaitingEmbedding: 0, errors: [],
+  });
+  const merge = (into: IngestSummary, part: IngestSummary) => {
+    into.sourcesInserted += part.sourcesInserted;
+    into.sourcesUpdated += part.sourcesUpdated;
+    into.sourcesSkipped += part.sourcesSkipped;
+    into.chunksCreated += part.chunksCreated;
+    into.embeddingsReused += part.embeddingsReused;
+    into.timestampsInherited += part.timestampsInherited;
+    into.errors.push(...part.errors);
+  };
+
+  // Recognised chat exports: ingested under their own origin, not 'manual'.
+  for (const f of files) {
+    if (!f.parsed || f.parsed.conversations.length === 0) continue;
+    summary ??= blank();
+    const part = await ingestConversations(sql, f.parsed.conversations, {
+      origin: f.parsed.origin,
+      rawPath: f.savedTo ?? `upload://${f.name}`,
+      project,
+    });
+    merge(summary, part);
+    f.message =
+      `Imported ${part.sourcesInserted} new and ${part.sourcesUpdated} updated ` +
+      `conversation(s) from ${f.parsed.conversations.length} parsed ` +
+      `(${part.sourcesSkipped} unchanged).`;
+  }
+
   if (conversations.length > 0) {
     // Group by resolved project so each file keeps its own frontmatter tag.
     // The form's project field, when set, overrides frontmatter for every file.
@@ -129,11 +177,7 @@ export async function importFiles(formData: FormData): Promise<ImportResult> {
       byProject.set(p, [...(byProject.get(p) ?? []), conv]);
     }
 
-    summary = {
-      sourcesInserted: 0, sourcesUpdated: 0, sourcesSkipped: 0, chunksCreated: 0,
-      embeddingsReused: 0, embeddingsComputed: 0, timestampsInherited: 0,
-      chunksAwaitingEmbedding: 0, errors: [],
-    };
+    summary ??= blank();
 
     for (const [groupProject, convs] of byProject) {
       const part = await ingestConversations(sql, convs, {
@@ -141,13 +185,7 @@ export async function importFiles(formData: FormData): Promise<ImportResult> {
         rawPath: 'upload://',
         project: groupProject,
       });
-      summary.sourcesInserted += part.sourcesInserted;
-      summary.sourcesUpdated += part.sourcesUpdated;
-      summary.sourcesSkipped += part.sourcesSkipped;
-      summary.chunksCreated += part.chunksCreated;
-      summary.embeddingsReused += part.embeddingsReused;
-      summary.timestampsInherited += part.timestampsInherited;
-      summary.errors.push(...part.errors);
+      merge(summary, part);
     }
   }
 
@@ -158,7 +196,10 @@ export async function importFiles(formData: FormData): Promise<ImportResult> {
   revalidatePath('/status');
   revalidatePath('/browse');
 
-  return { files, summary, pendingEmbeddings: Number(pending?.n ?? 0) };
+  // The parsed conversations can be megabytes; they must not be serialised back.
+  const clientFiles: ImportedFile[] = files.map(({ parsed: _parsed, ...rest }) => rest);
+
+  return { files: clientFiles, summary, pendingEmbeddings: Number(pending?.n ?? 0) };
 }
 
 export interface EmbedBatchResult {
@@ -182,11 +223,15 @@ export async function embedBatch(size = 64): Promise<EmbedBatchResult> {
 
   if (pending.length > 0) {
     const vectors = await getEmbeddingProvider().embedDocuments(pending.map((p) => p.content));
-    await sql.begin(async (tx) => {
-      for (const [i, row] of pending.entries()) {
-        await tx`UPDATE chunks SET embedding = ${`[${vectors[i]!.join(',')}]`}::vector WHERE id = ${row.id}`;
-      }
-    });
+    // One statement per batch; per-row updates paid a network round trip each.
+    const ids = pending.map((p) => p.id);
+    const literals = vectors.map((v) => `[${v.join(',')}]`);
+    await sql`
+      UPDATE chunks c SET embedding = v.emb::vector
+      FROM (SELECT unnest(${ids}::bigint[]) AS id,
+                   unnest(${literals}::text[]) AS emb) v
+      WHERE c.id = v.id
+    `;
   }
 
   const [left] = await sql<{ n: string }[]>`
@@ -225,7 +270,7 @@ function describeArchive(
   archive: ReturnType<typeof readArchive>,
   origin: string,
   savedTo?: string,
-): ImportedFile {
+): PendingImport {
   const listing = archive.entries.map((e) => ({ name: e.name, bytes: e.bytes }));
 
   if (!archive.conversations?.text) {
@@ -250,6 +295,18 @@ function describeArchive(
       hint: err instanceof Error ? err.message : String(err),
       archive: listing,
       savedTo,
+    };
+  }
+
+  const recognised = parseExport(parsed);
+  if (recognised) {
+    return {
+      name,
+      status: 'imported',
+      message: `Opened ${archive.conversations.name} — recognised as a ${recognised.origin} export.`,
+      archive: listing,
+      savedTo,
+      parsed: recognised,
     };
   }
 
@@ -283,7 +340,7 @@ async function handleManifest(
   name: string,
   json: unknown,
   report: DetectionReport,
-): Promise<ImportedFile> {
+): Promise<PendingImport> {
   const manifest = report.manifest!;
   const raw = json as { data_files?: { category?: string; filename?: string; export_url?: string }[] };
 

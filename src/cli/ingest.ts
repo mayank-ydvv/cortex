@@ -16,6 +16,8 @@ import {
   type IngestSummary,
 } from '../ingest/index';
 import { inspectJson } from '../ingest/parsers/detect';
+import { parseExport } from '../ingest/parsers/index';
+import { readArchive } from '../ingest/archive';
 import { manualProject, parseManual } from '../ingest/parsers/manual';
 import type { ParsedConversation } from '../ingest/parsers/types';
 
@@ -50,23 +52,71 @@ async function collectFiles(path: string): Promise<string[]> {
 async function main() {
   const info = await stat(target);
 
-  // JSON: a Claude or ChatGPT export. Report its shape rather than guessing.
+  // A zip export: read the conversations file straight out of the archive.
+  if (info.isFile() && extname(target).toLowerCase() === '.zip') {
+    const archive = readArchive(new Uint8Array(await readFile(target)));
+    if (!archive.conversations?.text) {
+      console.log(`\nNo JSON found inside ${target}.`);
+      console.log('Files in the archive:', archive.entries.map((e) => e.name).join(', '));
+      return;
+    }
+    console.log(`\nReading ${archive.conversations.name} from ${target}`);
+    await importJson(JSON.parse(archive.conversations.text), target);
+    return;
+  }
+
   if (info.isFile() && extname(target).toLowerCase() === '.json') {
-    const report = inspectJson(JSON.parse(await readFile(target, 'utf8')));
-    console.log(`\nInspecting ${target}\n`);
+    await importJson(JSON.parse(await readFile(target, 'utf8')), target);
+    return;
+  }
+
+  await importNotes();
+}
+
+/** Import a parsed export, or report its structure if nothing recognises it. */
+async function importJson(json: unknown, rawPath: string) {
+  const recognised = parseExport(json);
+
+  if (recognised) {
+    console.log(
+      `\nRecognised a ${recognised.origin} export: ${recognised.conversations.length} conversation(s).\n`,
+    );
+    const sql = getSql();
+    const summary = await ingestConversations(sql, recognised.conversations, {
+      origin: recognised.origin,
+      rawPath,
+      project: opts.project ?? null,
+      dryRun: opts.dryRun,
+      log: (l) => console.log(l),
+    });
+
+    if (opts.dryRun) {
+      console.log(formatSummary(summary));
+      console.log('\n(dry run - nothing was written and nothing was embedded)');
+      return;
+    }
+    await embedPendingChunks(sql, summary, (l) => console.log(l));
+    console.log(formatSummary(summary));
+    return;
+  }
+
+  {
+    const report = inspectJson(json);
+    console.log(`\nInspecting ${rawPath}\n`);
     console.log(`  shape:           ${report.shape}`);
     console.log(`  top-level keys:  ${report.topLevelKeys.join(', ') || '(none)'}`);
     if (report.itemCount !== null) console.log(`  items:           ${report.itemCount}`);
     console.log(`  looks like:      ${report.origin ?? 'unrecognised'}`);
     console.log(
-      '\nThe Claude and ChatGPT parsers are not written yet, by design: guessing the\n' +
-        'export shape produces a parser that silently mangles timestamps, which would\n' +
-        'degrade every time-scoped query without any error. Share this file and the\n' +
-        'parser gets written against it.\n',
+      '\nNo parser recognises this structure. Guessing it would produce a parser that\n' +
+        'silently mangles timestamps, degrading every time-scoped query with no error.\n' +
+        'Share the structure above and the parser gets written against it.\n',
     );
-    return;
   }
+}
 
+/** Import markdown and text notes from a file or directory. */
+async function importNotes() {
   const files = await collectFiles(target);
   if (files.length === 0) {
     console.log('No .md, .markdown or .txt files found.');

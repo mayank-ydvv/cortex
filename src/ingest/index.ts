@@ -22,6 +22,13 @@
  *
  * On replace, embeddings are reused for chunks whose text is unchanged. Editing
  * the tail of a long conversation then re-importing costs only the new turns.
+ *
+ * Batching
+ * --------
+ * Every write is a single statement per conversation or per batch, never one
+ * per chunk. Against a hosted database the round trip dominates: a real 1070
+ * chunk import issued 1070 inserts plus 1070 updates, and each one paid the
+ * full latency to the region. Bulk statements turn that into a handful.
  */
 import { createHash } from 'node:crypto';
 import type postgres from 'postgres';
@@ -154,22 +161,40 @@ export async function ingestConversations(
           sourceId = row!.id;
         }
 
-        let reusedCount = 0;
-        for (const chunk of chunks) {
-          const chunkHash = sha256(chunk.content);
-          const recycled = priorEmbeddings.get(chunkHash) ?? null;
-          if (recycled) reusedCount += 1;
+        const rows = chunks.map((chunk) => ({
+          source_id: sourceId,
+          content: chunk.content,
+          position: chunk.position,
+          role: chunk.role,
+          occurred_at: chunk.occurredAt,
+          content_hash: sha256(chunk.content),
+          timestamp_inherited: chunk.timestampInherited,
+        }));
 
+        // One statement for the whole conversation. Embeddings are filled
+        // separately so the insert never carries a vector literal per row.
+        await tx`INSERT INTO chunks ${tx(rows)}`;
+
+        // Recycle embeddings for chunks whose text survived the edit, again in
+        // a single statement rather than one update each.
+        const hashes: string[] = [];
+        const vectors: string[] = [];
+        for (const row of rows) {
+          const recycled = priorEmbeddings.get(row.content_hash);
+          if (recycled) {
+            hashes.push(row.content_hash);
+            vectors.push(recycled);
+          }
+        }
+        if (hashes.length > 0) {
           await tx`
-            INSERT INTO chunks (source_id, content, embedding, position, role, occurred_at,
-                                content_hash, timestamp_inherited)
-            VALUES (${sourceId}, ${chunk.content},
-                    ${recycled ? sql`${recycled}::vector` : null},
-                    ${chunk.position}, ${chunk.role}, ${chunk.occurredAt}, ${chunkHash},
-                    ${chunk.timestampInherited})
+            UPDATE chunks c SET embedding = v.emb::vector
+            FROM (SELECT unnest(${hashes}::text[]) AS hash,
+                         unnest(${vectors}::text[]) AS emb) v
+            WHERE c.source_id = ${sourceId} AND c.content_hash = v.hash
           `;
         }
-        return reusedCount;
+        return hashes.length;
       });
 
       if (existing) summary.sourcesUpdated += 1;
@@ -226,13 +251,16 @@ export async function embedPendingChunks(
 
     const vectors = await embedder.embedDocuments(pending.map((p) => p.content));
 
-    await sql.begin(async (tx) => {
-      for (const [i, row] of pending.entries()) {
-        await tx`
-          UPDATE chunks SET embedding = ${`[${vectors[i]!.join(',')}]`}::vector WHERE id = ${row.id}
-        `;
-      }
-    });
+    // One statement per batch. Per-row updates paid a full network round trip
+    // each, which dominated the import on a hosted database.
+    const ids = pending.map((p) => p.id);
+    const literals = vectors.map((v) => `[${v.join(',')}]`);
+    await sql`
+      UPDATE chunks c SET embedding = v.emb::vector
+      FROM (SELECT unnest(${ids}::bigint[]) AS id,
+                   unnest(${literals}::text[]) AS emb) v
+      WHERE c.id = v.id
+    `;
 
     done += pending.length;
     summary.embeddingsComputed += pending.length;
