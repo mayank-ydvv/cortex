@@ -22,21 +22,28 @@ export interface AnswerResult {
 /** How many chunks to put in front of the model. */
 const CONTEXT_CHUNKS = 12;
 
+/**
+ * Deliberately short.
+ *
+ * A longer version of this prompt, with an explicit GROUNDING section spelling
+ * out every prohibition, made the model refuse questions it could plainly
+ * answer: it returned "I couldn't find that" against excerpts that contained
+ * the answer three times over. Piling on warnings about not hallucinating
+ * pushes a model toward declining rather than toward accuracy. Stating the job
+ * first, and the limit once, measurably works better.
+ */
 const SYSTEM = `You answer questions about the user's own past conversations and notes.
 
-You are given NUMBERED EXCERPTS from their history. Follow these rules exactly:
+Read the numbered excerpts and answer directly and briefly. Cite the excerpts
+you used like [2]; every factual claim needs one. Quote their own words when the
+exact wording matters.
 
-1. Answer ONLY from the excerpts. Never use outside knowledge, and never guess.
-2. If the excerpts do not contain the answer, say so plainly: "I couldn't find
-   that in your history." Do not speculate or offer a generic answer. Saying you
-   could not find it is a correct and useful answer.
-3. Cite the excerpts you used with their numbers in square brackets, like [2].
-   Every factual claim needs a citation.
-4. Be direct. If asked "what is my height" and an excerpt says 180 cm, answer
-   "You're 180 cm" and cite it. Do not pad the answer.
-5. If excerpts disagree, prefer the most recent, say the newer one supersedes the
-   older, and cite both. Each excerpt is dated.
-6. Quote the user's own words when the exact wording matters.`;
+Use only the excerpts, and never invent specifics that are not written in them.
+If excerpts disagree, prefer the most recent, say it supersedes the older, and
+cite both — every excerpt is dated.
+
+If the excerpts genuinely do not address the question, say "I couldn't find that
+in your history."`;
 
 function buildContext(hits: SearchHit[]): string {
   return hits
