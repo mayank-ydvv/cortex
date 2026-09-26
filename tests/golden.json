@@ -1,24 +1,30 @@
 [
   {
+    "id": "g0",
+    "query": "__README__",
+    "category": "meta",
+    "expected_source_ids": [],
+    "notes": "Pin `now` ONLY for entries scored against real imported data, which has absolute dates. Fixtures are seeded relative to the current time, so a pinned `now` will drift away from them and report false failures. Source ids also change every time fixtures are re-seeded, so fill expected_source_ids from your real corpus, not from a fixture run."
+  },
+  {
     "id": "g1",
     "query": "what did we decide about auth last week?",
     "category": "time-scoped",
-    "now": "2026-09-20T00:00:00+05:30",
     "expected_source_ids": [],
-    "notes": "time-scoped; must return the recent JWT decision and NOT the March session-cookie thread"
+    "notes": "Must return the recent JWT decision and NOT the older session-cookie thread. No pinned `now` while this runs against fixtures."
   },
   {
     "id": "g2",
     "query": "hnsw.iterative_scan",
     "category": "exact-term",
     "expected_source_ids": [],
-    "notes": "exact-term; the chunk literally naming the setting must outrank chunks merely discussing indexes"
+    "notes": "The chunk literally naming the setting must outrank chunks merely discussing indexes."
   },
   {
     "id": "g3",
     "query": "how should we handle user sessions",
     "category": "conceptual",
     "expected_source_ids": [],
-    "notes": "conceptual; no exact term overlap, vector leg should carry this"
+    "notes": "No exact term overlap; the vector leg should carry this."
   }
 ]

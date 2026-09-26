@@ -21,6 +21,8 @@ export interface ChunkDraft {
   occurredAt: Date;
   /** Monotonic within a conversation, across all turns. */
   position: number;
+  /** True when this piece's turn had no timestamp and inherited the conversation start. */
+  timestampInherited: boolean;
 }
 
 /** Greedily pack pieces into groups no larger than `budget` tokens. */
@@ -111,7 +113,10 @@ export function chunkMessages(
     const inherited = message.occurredAt === null;
 
     for (const piece of splitText(content, budget)) {
-      chunks.push({ content: piece, role: message.role, occurredAt, position });
+      chunks.push({
+        content: piece, role: message.role, occurredAt, position,
+        timestampInherited: inherited,
+      });
       position += 1;
       if (inherited) inheritedTimestamps += 1;
     }

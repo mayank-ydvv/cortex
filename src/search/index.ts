@@ -114,8 +114,8 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   const warnings: string[] = [];
   if (vectorLeg.possiblyTruncated) {
     warnings.push(
-      `Vector leg returned ${vectorLeg.hits.length}/${depth} rows under a date filter. ` +
-        'The HNSW index may be post-filtering; results could be incomplete.',
+      `Vector leg returned ${vectorLeg.hits.length} of ${vectorLeg.candidateCount} matching ` +
+        'chunks. The HNSW index is post-filtering and results are incomplete.',
     );
   }
   if (keywordHits.length === 0) {

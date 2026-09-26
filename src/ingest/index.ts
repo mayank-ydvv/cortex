@@ -161,10 +161,12 @@ export async function ingestConversations(
           if (recycled) reusedCount += 1;
 
           await tx`
-            INSERT INTO chunks (source_id, content, embedding, position, role, occurred_at, content_hash)
+            INSERT INTO chunks (source_id, content, embedding, position, role, occurred_at,
+                                content_hash, timestamp_inherited)
             VALUES (${sourceId}, ${chunk.content},
                     ${recycled ? sql`${recycled}::vector` : null},
-                    ${chunk.position}, ${chunk.role}, ${chunk.occurredAt}, ${chunkHash})
+                    ${chunk.position}, ${chunk.role}, ${chunk.occurredAt}, ${chunkHash},
+                    ${chunk.timestampInherited})
           `;
         }
         return reusedCount;

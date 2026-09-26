@@ -20,9 +20,10 @@
  * scan over the date-filtered rows. That is EXACT rather than approximate and is
  * cheap at personal scale, so it is left alone.
  *
- * Neither mitigation is a guarantee, so the caller is told how many rows came
- * back and warns when a filtered search returns short. An invisible shortfall
- * becomes a visible one.
+ * Neither mitigation is a guarantee, so the leg also counts how many candidates
+ * actually match the filter. A short result set only indicates post-filtering if
+ * MORE candidates existed than were returned -- otherwise the window genuinely
+ * holds that few rows, and warning about it would be crying wolf.
  */
 import type postgres from 'postgres';
 import type { RankedHit } from './rrf';
@@ -30,7 +31,12 @@ import { buildWhere, type CandidateFilter } from './filters';
 
 export interface VectorLegResult {
   hits: RankedHit[];
-  /** True when the leg returned fewer rows than asked for while a date filter was active. */
+  /** Rows matching the filter, regardless of how many the ANN scan surfaced. */
+  candidateCount: number;
+  /**
+   * True only when candidates existed that the scan did not return -- the actual
+   * signature of HNSW post-filtering, rather than a merely small candidate set.
+   */
   possiblyTruncated: boolean;
 }
 
@@ -43,13 +49,13 @@ export async function vectorSearch(
   const where = buildWhere(sql, filter);
   const vec = `[${queryEmbedding.join(',')}]`;
 
-  const rows = await sql.begin(async (tx) => {
+  const { rows, candidateCount } = await sql.begin(async (tx) => {
     // SET LOCAL keeps these scoped to this transaction rather than the pooled
     // connection, which would leak the settings to unrelated queries.
     await tx`SET LOCAL hnsw.iterative_scan = 'relaxed_order'`;
     await tx`SET LOCAL hnsw.ef_search = 200`;
 
-    return tx<{ chunk_id: number; distance: number; rank: number }[]>`
+    const found = await tx<{ chunk_id: number; distance: number; rank: number }[]>`
       SELECT c.id AS chunk_id,
              c.embedding <=> ${vec}::vector AS distance,
              ROW_NUMBER() OVER (ORDER BY c.embedding <=> ${vec}::vector) AS rank
@@ -59,9 +65,19 @@ export async function vectorSearch(
       ORDER BY c.embedding <=> ${vec}::vector
       LIMIT ${limit}
     `;
+
+    // Exact count over the same predicate. This is what distinguishes "the index
+    // stopped early" from "the window only holds this many rows".
+    const [counted] = await tx<{ n: string }[]>`
+      SELECT count(*)::text AS n
+      FROM chunks c JOIN sources s ON s.id = c.source_id
+      WHERE ${where}
+    `;
+
+    return { rows: found, candidateCount: Number(counted?.n ?? 0) };
   });
 
-  const dateFiltered = Boolean(filter.from || filter.to);
+  const wanted = Math.min(limit, candidateCount);
 
   return {
     hits: rows.map((r) => ({
@@ -69,6 +85,7 @@ export async function vectorSearch(
       rank: Number(r.rank),
       score: Number(r.distance),
     })),
-    possiblyTruncated: dateFiltered && rows.length < limit,
+    candidateCount,
+    possiblyTruncated: rows.length < wanted,
   };
 }

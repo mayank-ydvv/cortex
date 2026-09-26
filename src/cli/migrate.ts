@@ -8,9 +8,12 @@
  */
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { closeDb, getSql } from '../db/client';
 
-const MIGRATIONS_DIR = new URL('../../drizzle/', import.meta.url).pathname;
+// fileURLToPath, not .pathname: pathname percent-encodes spaces, which breaks
+// any project path containing them.
+const MIGRATIONS_DIR = fileURLToPath(new URL('../../drizzle/', import.meta.url));
 
 async function main() {
   const sql = getSql();

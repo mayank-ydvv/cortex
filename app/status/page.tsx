@@ -35,17 +35,17 @@ export default async function StatusPage() {
         </div>
       )}
 
-      {s.likelyInherited > 0 && (
+      {s.inherited > 0 && (
         <div className="notice notice-warn">
           <span className="notice-icon"><AlertIcon /></span>
           <div className="notice-body">
             <div className="notice-title">
-              {s.likelyInherited} chunk{s.likelyInherited === 1 ? '' : 's'} share their
+              {s.inherited} chunk{s.inherited === 1 ? '' : 's'} inherited their
               conversation&rsquo;s start time
             </div>
             <p>
-              Likely inherited because the export carried no per-message timestamp. They are still
-              real timestamps, never import time, but time-scoped queries are coarser for them.
+              The export carried no per-message timestamp for these. They are still real
+              timestamps, never import time, but time-scoped queries are coarser for them.
             </p>
           </div>
         </div>

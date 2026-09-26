@@ -159,9 +159,10 @@ async function main() {
     for (const [i, turn] of fx.turns.entries()) {
       const occurredAt = new Date(now - turn.daysAgo * DAY);
       await sql`
-        INSERT INTO chunks (source_id, content, embedding, position, role, occurred_at, content_hash)
+        INSERT INTO chunks (source_id, content, embedding, position, role, occurred_at,
+                            content_hash, timestamp_inherited)
         VALUES (${source!.id}, ${turn.content}, ${`[${vectors[i]!.join(',')}]`}::vector,
-                ${i}, ${turn.role}, ${occurredAt}, ${sha(turn.content)})
+                ${i}, ${turn.role}, ${occurredAt}, ${sha(turn.content)}, false)
       `;
       chunkCount += 1;
     }

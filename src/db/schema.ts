@@ -8,6 +8,7 @@
 import { sql } from 'drizzle-orm';
 import {
   bigint,
+  boolean,
   customType,
   index,
   integer,
@@ -59,6 +60,8 @@ export const chunks = pgTable(
     /** The message's own timestamp. Never import time. */
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
     contentHash: text('content_hash').notNull(),
+    /** True when the message had no timestamp of its own. Never means import time. */
+    timestampInherited: boolean('timestamp_inherited').notNull().default(false),
     tsv: tsvector('tsv').generatedAlwaysAs(sql`to_tsvector('english', content)`),
   },
   (t) => [

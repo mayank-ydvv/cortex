@@ -7,8 +7,8 @@ export interface CorpusStats {
   sources: number;
   chunks: number;
   awaitingEmbedding: number;
-  /** Chunks whose timestamp equals their conversation start -- likely inherited. */
-  likelyInherited: number;
+  /** Chunks the ingest recorded as having inherited their conversation's start time. */
+  inherited: number;
   earliest: Date | null;
   latest: Date | null;
   byOrigin: { origin: string; sources: number; chunks: number }[];
@@ -29,9 +29,7 @@ export async function getCorpusStats(): Promise<CorpusStats> {
   `;
 
   const [inherited] = await sql<{ n: string }[]>`
-    SELECT count(*)::text AS n
-    FROM chunks c JOIN sources s ON s.id = c.source_id
-    WHERE c.occurred_at = s.started_at
+    SELECT count(*)::text AS n FROM chunks WHERE timestamp_inherited
   `;
 
   const byOrigin = await sql<{ origin: string; sources: string; chunks: string }[]>`
@@ -50,7 +48,7 @@ export async function getCorpusStats(): Promise<CorpusStats> {
     sources: Number(totals?.sources ?? 0),
     chunks: Number(totals?.chunks ?? 0),
     awaitingEmbedding: Number(totals?.awaiting ?? 0),
-    likelyInherited: Number(inherited?.n ?? 0),
+    inherited: Number(inherited?.n ?? 0),
     earliest: totals?.earliest ?? null,
     latest: totals?.latest ?? null,
     byOrigin: byOrigin.map((r) => ({

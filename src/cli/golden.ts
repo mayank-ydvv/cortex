@@ -9,8 +9,15 @@
  * resolves to a different window on every run and the expected ids rot within
  * days -- the runner would then report regressions that are really just the
  * calendar moving.
+ *
+ * Pin it only for entries scored against REAL imported data, which carries
+ * absolute dates. Fixtures are seeded relative to the current time, so a pinned
+ * `now` drifts away from them and reports failures that are not real.
+ *
+ * Entries with category "meta" are documentation and are skipped.
  */
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { closeDb } from '../db/client';
 import { search } from '../search/index';
 
@@ -46,12 +53,13 @@ function scoreOne(expected: number[], returned: number[]): { precision: number; 
 const pct = (n: number) => `${(n * 100).toFixed(0)}%`.padStart(4);
 
 async function main() {
-  const path = new URL('../../tests/golden.json', import.meta.url).pathname;
+  // fileURLToPath, not .pathname -- see migrate.ts.
+  const path = fileURLToPath(new URL('../../tests/golden.json', import.meta.url));
   const entries: GoldenEntry[] = JSON.parse(await readFile(path, 'utf8'));
 
   const results: Scored[] = [];
 
-  for (const entry of entries) {
+  for (const entry of entries.filter((e) => e.category !== 'meta')) {
     // Results are chunks; scoring is per SOURCE, so map and dedupe first.
     const { hits } = await search(entry.query, {
       limit: AT,

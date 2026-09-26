@@ -95,6 +95,18 @@ describe('chunkMessages — timestamps are sacred', () => {
     expect(inheritedTimestamps).toBe(1);
   });
 
+  it('marks every piece of an undated turn as inherited', () => {
+    const big = 'u'.repeat(3000);
+    const { chunks } = chunkMessages([msg('assistant', big, null)], START);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const c of chunks) expect(c.timestampInherited).toBe(true);
+  });
+
+  it('does not mark a dated turn as inherited', () => {
+    const { chunks } = chunkMessages([msg('user', 'dated', LATER)], START);
+    expect(chunks[0]!.timestampInherited).toBe(false);
+  });
+
   it('counts every inherited piece, so ingest can report the real number', () => {
     const big = 'u'.repeat(3000);
     const { chunks, inheritedTimestamps } = chunkMessages([msg('assistant', big, null)], START);
