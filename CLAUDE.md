@@ -116,6 +116,9 @@ pnpm test:golden                                   # precision@5 / recall@5 by c
 pnpm seed:fixtures                                 # synthetic chunks for dev
 ```
 
+`pnpm run search`, not `pnpm search` — the latter collides with pnpm's own
+registry-search builtin and searches npm instead.
+
 Ingestion stays a CLI command on purpose: it is a long-running batch job, and running it
 behind an HTTP route would require the job queue and progress streaming that belong to a
 later phase.
