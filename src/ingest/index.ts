@@ -25,9 +25,9 @@
  */
 import { createHash } from 'node:crypto';
 import type postgres from 'postgres';
-import { chunkMessages, type ChunkDraft } from './chunk.js';
-import { getEmbeddingProvider } from './embed.js';
-import type { Origin, ParsedConversation } from './parsers/types.js';
+import { chunkMessages, type ChunkDraft } from './chunk';
+import { getEmbeddingProvider } from './embed';
+import type { Origin, ParsedConversation } from './parsers/types';
 
 export interface IngestSummary {
   sourcesInserted: number;

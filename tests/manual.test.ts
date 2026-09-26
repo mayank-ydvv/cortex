@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { manualProject, parseManual } from '../src/ingest/parsers/manual.js';
+import { manualProject, parseManual } from '../src/ingest/parsers/manual';
 
 const MTIME = new Date('2026-09-19T12:00:00.000Z');
 const parse = (text: string, path = '/notes/auth-notes.md') =>

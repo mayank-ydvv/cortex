@@ -8,7 +8,7 @@
  */
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { closeDb, getSql } from '../db/client.js';
+import { closeDb, getSql } from '../db/client';
 
 const MIGRATIONS_DIR = new URL('../../drizzle/', import.meta.url).pathname;
 

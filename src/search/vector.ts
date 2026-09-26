@@ -25,8 +25,8 @@
  * becomes a visible one.
  */
 import type postgres from 'postgres';
-import type { RankedHit } from './rrf.js';
-import { buildWhere, type CandidateFilter } from './filters.js';
+import type { RankedHit } from './rrf';
+import { buildWhere, type CandidateFilter } from './filters';
 
 export interface VectorLegResult {
   hits: RankedHit[];

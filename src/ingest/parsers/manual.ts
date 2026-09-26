@@ -17,7 +17,7 @@
  * inherited. Import time is never used.
  */
 import { basename } from 'node:path';
-import type { ParsedConversation, ParsedMessage } from './types.js';
+import type { ParsedConversation, ParsedMessage } from './types';
 
 export interface ManualInput {
   text: string;

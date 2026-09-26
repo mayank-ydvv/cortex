@@ -12,13 +12,13 @@
  * is the only way to tell a date-parsing bug from a retrieval bug when results
  * look wrong, so it is never optional.
  */
-import { getSql } from '../db/client.js';
-import { getEmbeddingProvider } from '../ingest/embed.js';
-import type { CandidateFilter } from './filters.js';
-import { fuse, type FusedHit, type RankedHit, DEFAULT_K } from './rrf.js';
-import { keywordSearch } from './keyword.js';
-import { parseTimeRange, type TimeRange } from './time.js';
-import { vectorSearch } from './vector.js';
+import { getSql } from '../db/client';
+import { getEmbeddingProvider } from '../ingest/embed';
+import type { CandidateFilter } from './filters';
+import { fuse, type FusedHit, type RankedHit, DEFAULT_K } from './rrf';
+import { keywordSearch } from './keyword';
+import { parseTimeRange, type TimeRange } from './time';
+import { vectorSearch } from './vector';
 
 export interface SearchOptions {
   /** Results to return. */

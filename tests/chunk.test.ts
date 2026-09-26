@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { chunkMessages, splitText } from '../src/ingest/chunk.js';
-import { MAX_INPUT_TOKENS, estimateTokens } from '../src/ingest/embed.js';
-import type { ParsedMessage } from '../src/ingest/parsers/types.js';
+import { chunkMessages, splitText } from '../src/ingest/chunk';
+import { MAX_INPUT_TOKENS, estimateTokens } from '../src/ingest/embed';
+import type { ParsedMessage } from '../src/ingest/parsers/types';
 
 const START = new Date('2026-09-01T10:00:00.000Z');
 const LATER = new Date('2026-09-01T10:05:00.000Z');

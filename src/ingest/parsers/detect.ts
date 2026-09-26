@@ -11,7 +11,7 @@
  * So instead of guessing, this reports what it found and asks for the file.
  * `pnpm ingest <file> --inspect` prints the structure needed to write it.
  */
-import type { Origin } from './types.js';
+import type { Origin } from './types';
 
 export interface DetectionReport {
   origin: Origin | null;

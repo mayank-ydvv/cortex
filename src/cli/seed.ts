@@ -9,8 +9,8 @@
  * This lets the core requirement be proven before any real export is imported.
  */
 import { createHash } from 'node:crypto';
-import { closeDb, getSql } from '../db/client.js';
-import { getEmbeddingProvider } from '../ingest/embed.js';
+import { closeDb, getSql } from '../db/client';
+import { getEmbeddingProvider } from '../ingest/embed';
 
 interface Turn {
   role: 'user' | 'assistant';

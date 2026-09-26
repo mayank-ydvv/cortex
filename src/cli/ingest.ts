@@ -8,16 +8,16 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import { Command } from 'commander';
-import { closeDb, getSql } from '../db/client.js';
+import { closeDb, getSql } from '../db/client';
 import {
   embedPendingChunks,
   formatSummary,
   ingestConversations,
   type IngestSummary,
-} from '../ingest/index.js';
-import { inspectJson } from '../ingest/parsers/detect.js';
-import { manualProject, parseManual } from '../ingest/parsers/manual.js';
-import type { ParsedConversation } from '../ingest/parsers/types.js';
+} from '../ingest/index';
+import { inspectJson } from '../ingest/parsers/detect';
+import { manualProject, parseManual } from '../ingest/parsers/manual';
+import type { ParsedConversation } from '../ingest/parsers/types';
 
 const program = new Command()
   .name('ingest')

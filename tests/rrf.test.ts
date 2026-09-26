@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_K, fuse, type RankedHit } from '../src/search/rrf.js';
+import { DEFAULT_K, fuse, type RankedHit } from '../src/search/rrf';
 
 /** Build a list from chunk ids, assigning ranks 1..n. */
 const list = (...ids: number[]): RankedHit[] =>

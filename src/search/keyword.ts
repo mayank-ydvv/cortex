@@ -36,8 +36,8 @@
  * and escaped by Postgres, so it introduces no injection surface.
  */
 import type postgres from 'postgres';
-import type { RankedHit } from './rrf.js';
-import { buildWhere, type CandidateFilter } from './filters.js';
+import type { RankedHit } from './rrf';
+import { buildWhere, type CandidateFilter } from './filters';
 
 export async function keywordSearch(
   sql: postgres.Sql,

@@ -94,7 +94,12 @@ src/
     rrf.ts                   fuse()              <- unit tested
     vector.ts / keyword.ts   the two ranked legs
   cli/                       migrate, ingest, seed, golden
-app/                         Next.js UI: search, explain, browse, import status
+app/
+  page.tsx                   search + cited results
+  browse/                    timeline grouped by month
+  status/                    corpus stats and health warnings
+  _components/               explain panel, result list, setup notice, icons
+  globals.css                design tokens (dark-first, Swiss/minimal)
 tests/
   time.test.ts, rrf.test.ts, golden.json
 ```
@@ -105,7 +110,7 @@ tests/
 pnpm install
 pnpm migrate                                       # apply drizzle/*.sql
 pnpm ingest <path> [--project p] [--dry-run]       # import an export file (CLI only)
-pnpm dev                                           # web UI on localhost:3000
+pnpm dev                                           # web UI on localhost:3200
 pnpm test                                          # vitest unit tests
 pnpm test:golden                                   # precision@5 / recall@5 by category
 pnpm seed:fixtures                                 # synthetic chunks for dev

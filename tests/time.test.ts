@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatInTimeZone } from 'date-fns-tz';
-import { parseTimeRange } from '../src/search/time.js';
+import { parseTimeRange } from '../src/search/time';
 
 const TZ = 'Asia/Calcutta';
 

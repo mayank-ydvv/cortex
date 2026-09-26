@@ -12,8 +12,8 @@
  * Splitting prefers the most natural boundary available: paragraphs first, then
  * sentences, then a hard character cut as a last resort.
  */
-import { MAX_INPUT_TOKENS, TARGET_CHUNK_TOKENS, estimateTokens } from './embed.js';
-import type { ParsedMessage } from './parsers/types.js';
+import { MAX_INPUT_TOKENS, TARGET_CHUNK_TOKENS, estimateTokens } from './embed';
+import type { ParsedMessage } from './parsers/types';
 
 export interface ChunkDraft {
   content: string;

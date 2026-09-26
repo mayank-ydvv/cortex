@@ -11,8 +11,8 @@
  * calendar moving.
  */
 import { readFile } from 'node:fs/promises';
-import { closeDb } from '../db/client.js';
-import { search } from '../search/index.js';
+import { closeDb } from '../db/client';
+import { search } from '../search/index';
 
 interface GoldenEntry {
   id: string;

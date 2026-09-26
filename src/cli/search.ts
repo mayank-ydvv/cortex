@@ -5,8 +5,8 @@
  * verified without a UI in the way, and it is what the golden-set runner drives.
  */
 import { Command } from 'commander';
-import { closeDb } from '../db/client.js';
-import { search, type SearchExplain, type SearchHit } from '../search/index.js';
+import { closeDb } from '../db/client';
+import { search, type SearchExplain, type SearchHit } from '../search/index';
 
 const program = new Command()
   .name('search')
