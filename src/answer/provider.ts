@@ -9,12 +9,23 @@
  * two environment variables.
  */
 
+export interface ChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export interface AnswerProvider {
   readonly id: string;
   readonly model: string;
   /** False when no key is configured; callers fall back to showing sources. */
   readonly available: boolean;
-  complete(system: string, user: string, signal?: AbortSignal): Promise<string>;
+  /** `history` carries prior turns so follow-ups resolve against them. */
+  complete(
+    system: string,
+    user: string,
+    history?: ChatTurn[],
+    signal?: AbortSignal,
+  ): Promise<string>;
 }
 
 export class AnswerUnavailableError extends Error {
@@ -47,7 +58,12 @@ class OpenAICompatibleProvider implements AnswerProvider {
     return Boolean(this.apiKey);
   }
 
-  async complete(system: string, user: string, signal?: AbortSignal): Promise<string> {
+  async complete(
+    system: string,
+    user: string,
+    history: ChatTurn[] = [],
+    signal?: AbortSignal,
+  ): Promise<string> {
     if (!this.apiKey) {
       throw new AnswerUnavailableError(
         'No answer model is configured.',
@@ -81,6 +97,7 @@ class OpenAICompatibleProvider implements AnswerProvider {
         max_tokens: 2000,
         messages: [
           { role: 'system', content: system },
+          ...history,
           { role: 'user', content: user },
         ],
       }),

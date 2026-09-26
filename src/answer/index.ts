@@ -7,7 +7,7 @@
  * the prompt forbids it and every answer ships with the sources it used.
  */
 import { search, type SearchExplain, type SearchHit, type SearchOptions } from '../search/index';
-import { AnswerUnavailableError, getAnswerProvider } from './provider';
+import { AnswerUnavailableError, getAnswerProvider, type ChatTurn } from './provider';
 
 export interface AnswerResult {
   /** Null when no model is configured or the call failed; sources still returned. */
@@ -55,11 +55,21 @@ function buildContext(hits: SearchHit[]): string {
     .join('\n\n---\n\n');
 }
 
+export interface AnswerOptions extends SearchOptions {
+  /** Prior turns in this thread, so a follow-up reads as a continuation. */
+  history?: ChatTurn[];
+  /**
+   * Text to retrieve with, when it should differ from the question. A bare
+   * follow-up needs its subject restored before it can match anything.
+   */
+  retrieveWith?: string;
+}
+
 export async function answerQuestion(
   question: string,
-  opts: SearchOptions = {},
+  opts: AnswerOptions = {},
 ): Promise<AnswerResult> {
-  const { hits, explain } = await search(question, {
+  const { hits, explain } = await search(opts.retrieveWith ?? question, {
     ...opts,
     limit: opts.limit ?? CONTEXT_CHUNKS,
   });
@@ -97,7 +107,7 @@ export async function answerQuestion(
   const user = `Question: ${question}\n\nExcerpts from the user's history:\n\n${buildContext(hits)}`;
 
   try {
-    const answer = await provider.complete(SYSTEM, user);
+    const answer = await provider.complete(SYSTEM, user, opts.history ?? []);
     return { answer, unavailable: null, sources: hits, explain, model: provider.model };
   } catch (err) {
     const e = err instanceof AnswerUnavailableError ? err : null;
