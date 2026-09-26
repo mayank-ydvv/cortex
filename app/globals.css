@@ -314,3 +314,45 @@ table.data td.num { font-family: var(--mono); text-align: right; }
   .kv dt { margin-top: var(--sp-2); }
   .result-date { margin-left: 0; width: 100%; }
 }
+
+/* ---------- import ---------- */
+.import-row { display: flex; gap: var(--sp-2); flex-wrap: wrap; align-items: center; }
+.import-row input[type='file'] {
+  flex: 1; min-width: 200px; font-family: var(--mono); font-size: 11.5px;
+  color: var(--muted); cursor: pointer;
+}
+.import-row input[type='file']::file-selector-button {
+  font-family: var(--mono); font-size: 11.5px; cursor: pointer;
+  background: var(--card-raised); color: var(--fg);
+  border: 1px solid var(--border-strong); border-radius: var(--radius);
+  padding: 6px 12px; margin-right: var(--sp-3);
+  transition: background var(--t), border-color var(--t);
+}
+.import-row input[type='file']::file-selector-button:hover {
+  background: var(--border); border-color: var(--accent);
+}
+.project-input {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 8px var(--sp-3);
+  font-family: var(--mono); font-size: 12px; width: 150px;
+  transition: border-color var(--t);
+}
+.project-input:focus { border-color: var(--accent); outline: none; }
+.project-input::placeholder { color: var(--muted-deep); }
+.import-row .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.import-hint {
+  font-family: var(--mono); font-size: 11px; color: var(--muted-deep);
+  margin: var(--sp-3) 0 0; line-height: 1.6;
+}
+.import-hint code {
+  background: var(--bg); padding: 1px 5px; border-radius: 3px;
+  border: 1px solid var(--border); color: var(--muted);
+}
+
+pre.sample {
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: var(--sp-3); overflow: auto; max-height: 340px;
+  font-family: var(--mono); font-size: 11px; line-height: 1.55;
+  color: var(--muted); margin: 0; white-space: pre; tab-size: 2;
+}

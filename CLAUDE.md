@@ -114,14 +114,21 @@ pnpm dev                                           # web UI on localhost:3200
 pnpm test                                          # vitest unit tests
 pnpm test:golden                                   # precision@5 / recall@5 by category
 pnpm seed:fixtures                                 # synthetic chunks for dev
+
+Uploads on the status page accept .md/.txt notes directly. A Claude or ChatGPT .json
+export is not parsed -- it prints the file's real structure instead, which is what a
+parser must be written against.
 ```
 
 `pnpm run search`, not `pnpm search` — the latter collides with pnpm's own
 registry-search builtin and searches npm instead.
 
-Ingestion stays a CLI command on purpose: it is a long-running batch job, and running it
-behind an HTTP route would require the job queue and progress streaming that belong to a
-later phase.
+Ingestion is available two ways. The CLI handles bulk imports from disk. The status page
+also accepts uploads, which works without a job queue by splitting the work in two: the
+upload inserts chunks with no embedding and returns immediately, then the client drives
+embedding as a loop of bounded batches. That reuses the nullable embedding column that
+already makes ingest resumable -- closing the tab mid-embed leaves chunks the next run
+sweeps up.
 
 The UI's explain panel shows the parsed date range, the cleaned query, both raw ranked
 lists, and the fused result — use it whenever results look wrong. `from`/`to` overrides

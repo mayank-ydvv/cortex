@@ -1,5 +1,6 @@
 import { checkDb, getCorpusStats } from '../../src/db/stats';
 import { SetupNotice } from '../_components/setup-notice';
+import { ImportPanel } from '../_components/import-panel';
 import { AlertIcon } from '../_components/icons';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,8 @@ export default async function StatusPage() {
 
   return (
     <>
+      <ImportPanel initialPending={s.awaitingEmbedding} />
+
       {s.awaitingEmbedding > 0 && (
         <div className="notice notice-danger">
           <span className="notice-icon"><AlertIcon /></span>
