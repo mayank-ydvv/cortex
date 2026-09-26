@@ -160,7 +160,7 @@ function ImportReport({ result }: { result: ImportResult }) {
       )}
 
       {result.files.map((f) => (
-        <div key={f.name} className={`notice ${f.status === 'error' ? 'notice-danger' : f.status === 'unsupported' ? 'notice-warn' : ''}`}>
+        <div key={f.name} className={`notice ${f.status === 'error' ? 'notice-danger' : f.status === 'unsupported' || f.status === 'manifest' ? 'notice-warn' : ''}`}>
           <div className="notice-body" style={{ width: '100%' }}>
             <div className="notice-title">
               <span className={`badge ${f.status === 'imported' ? 'badge-origin' : 'badge-off'}`}>
@@ -170,7 +170,51 @@ function ImportReport({ result }: { result: ImportResult }) {
             </div>
             <p>{f.message}</p>
 
-            {f.report && (
+            {f.report?.manifest && (
+              <div style={{ marginTop: 'var(--sp-3)' }}>
+                <div className="stat-label" style={{ marginBottom: 'var(--sp-2)' }}>
+                  what to do
+                </div>
+                <ol className="manifest-steps">
+                  <li>
+                    Open the manifest and download each <code>export_url</code> in it
+                    {f.report.manifest.singleUseUrls && (
+                      <strong> — each link works only once, so save the file when it downloads</strong>
+                    )}
+                    .
+                  </li>
+                  <li>
+                    You only need{' '}
+                    <code>{f.report.manifest.conversationsFile ?? 'the conversations archive'}</code>
+                    {' '}— the others are metadata, design chats and frames.
+                  </li>
+                  <li>Unzip it (double-click on macOS) to get the conversations JSON.</li>
+                  <li>Upload that file here.</li>
+                </ol>
+                <div className="stat-label" style={{ margin: 'var(--sp-3) 0 var(--sp-1)' }}>
+                  files listed in this manifest
+                </div>
+                <table className="data">
+                  <tbody>
+                    {f.report.manifest.files.map((mf) => (
+                      <tr key={mf.filename}>
+                        <td>
+                          <span className={`badge ${mf.category === 'conversations' ? 'badge-origin' : 'badge-off'}`}>
+                            {mf.category}
+                          </span>
+                        </td>
+                        <td style={{ fontFamily: 'var(--mono)', fontSize: 11.5 }}>{mf.filename}</td>
+                        <td className="num" style={{ color: 'var(--muted-deep)', fontSize: 11 }}>
+                          {mf.category === 'conversations' ? 'this one' : 'not needed'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {f.report && !f.report.manifest && (
               <>
                 <dl className="kv" style={{ marginTop: 'var(--sp-2)' }}>
                   <dt>shape</dt><dd>{f.report.shape}</dd>

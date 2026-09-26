@@ -356,3 +356,14 @@ pre.sample {
   font-family: var(--mono); font-size: 11px; line-height: 1.55;
   color: var(--muted); margin: 0; white-space: pre; tab-size: 2;
 }
+
+.manifest-steps {
+  margin: 0; padding-left: var(--sp-5);
+  font-size: 12.5px; color: var(--muted); line-height: 1.7;
+}
+.manifest-steps li { margin-bottom: var(--sp-1); }
+.manifest-steps code {
+  background: var(--bg); padding: 1px 5px; border-radius: 3px;
+  border: 1px solid var(--border); font-family: var(--mono); font-size: 11px;
+}
+.manifest-steps strong { color: var(--warn); font-weight: 600; }

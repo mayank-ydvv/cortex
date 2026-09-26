@@ -14,7 +14,7 @@ import { getEmbeddingProvider } from '../src/ingest/embed';
 
 export interface ImportedFile {
   name: string;
-  status: 'imported' | 'skipped' | 'unsupported' | 'error';
+  status: 'imported' | 'skipped' | 'unsupported' | 'manifest' | 'error';
   message: string;
   /** Present when a JSON export could not be parsed: what the file actually contains. */
   report?: DetectionReport & { sampleKeys?: string[]; sample?: string };
@@ -66,6 +66,21 @@ export async function importFiles(formData: FormData): Promise<ImportResult> {
         // query with no error. Report the real structure instead.
         const json = JSON.parse(text);
         const report = inspectJson(json);
+
+        // A manifest is an index of downloads, not the export itself. Saying
+        // "unrecognised" here would send you hunting for a bug that is not there.
+        if (report.manifest) {
+          files.push({
+            name: file.name,
+            status: 'manifest',
+            message:
+              'This is the export manifest, not your conversations. It lists the files to ' +
+              'download; the chats are inside the conversations archive.',
+            report,
+          });
+          continue;
+        }
+
         const first = Array.isArray(json) ? json[0] : json;
         const sample =
           first && typeof first === 'object'

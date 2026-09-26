@@ -19,10 +19,58 @@ export interface DetectionReport {
   shape: string;
   topLevelKeys: string[];
   itemCount: number | null;
+  /**
+   * Set when the file is a Claude export MANIFEST rather than the data itself.
+   * Claude's export mails you a small JSON index listing download URLs for
+   * several zips; the conversations live in one of those. Uploading the
+   * manifest is an easy and very common mistake, so it gets named explicitly
+   * instead of being reported as an unrecognised export.
+   */
+  manifest?: {
+    files: { filename: string; category: string }[];
+    conversationsFile: string | null;
+    singleUseUrls: boolean;
+  };
+}
+
+/** True when the object is Claude's export manifest rather than export data. */
+function asManifest(json: unknown): DetectionReport['manifest'] | null {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return null;
+  const o = json as Record<string, unknown>;
+  if (!Array.isArray(o.data_files)) return null;
+
+  const files = (o.data_files as Record<string, unknown>[])
+    .filter((f) => f && typeof f === 'object')
+    .map((f) => ({
+      filename: String(f.filename ?? '(unnamed)'),
+      category: String(f.category ?? 'unknown'),
+    }));
+  if (files.length === 0) return null;
+
+  const conversations =
+    files.find((f) => f.category === 'conversations') ??
+    files.find((f) => /conversation/i.test(f.filename));
+
+  return {
+    files,
+    conversationsFile: conversations?.filename ?? null,
+    singleUseUrls: typeof o.instructions === 'string' && /once/i.test(o.instructions),
+  };
 }
 
 /** Describe a parsed JSON export without assuming a schema. */
 export function inspectJson(json: unknown): DetectionReport {
+  const manifest = asManifest(json);
+  if (manifest) {
+    return {
+      origin: 'claude',
+      shape: `Claude export manifest listing ${manifest.files.length} download(s)`,
+      topLevelKeys: Object.keys(json as object),
+      itemCount: manifest.files.length,
+      manifest,
+    };
+  }
+
   if (Array.isArray(json)) {
     const first = json[0];
     const keys = first && typeof first === 'object' ? Object.keys(first as object) : [];
