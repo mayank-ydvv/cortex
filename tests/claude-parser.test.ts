@@ -159,3 +159,62 @@ describe('parseClaudeExport — identity and titles', () => {
     expect(out[0]!.title!.endsWith('…')).toBe(true);
   });
 });
+
+describe('parseClaudeExport — files and attachments', () => {
+  const withAttachments = (msg: Record<string, unknown>) =>
+    parseClaudeExport([conv({
+      chat_messages: [{
+        uuid: 'm', sender: 'human', created_at: '2026-09-18T10:00:00Z',
+        text: 'here is the deck', content: [], ...msg,
+      }],
+    })]);
+
+  it('records attached filenames so a file is findable by name', () => {
+    // files[] carries no bytes, only names -- and often not even those.
+    const out = withAttachments({ files: [{ file_uuid: 'u1', file_name: 'budget.xlsx' }] });
+    expect(out[0]!.messages[0]!.content).toContain('[attached: budget.xlsx]');
+  });
+
+  it('ignores null filenames, which are common in files[]', () => {
+    const out = withAttachments({
+      files: [{ file_uuid: 'u1', file_name: null }, { file_uuid: 'u2', file_name: 'real.pdf' }],
+    });
+    expect(out[0]!.messages[0]!.content).toContain('[attached: real.pdf]');
+    expect(out[0]!.messages[0]!.content).not.toContain('null');
+  });
+
+  it('indexes attachment extracted_content as its own searchable message', () => {
+    const out = withAttachments({
+      attachments: [{ file_name: 'notes.pdf', file_type: 'pdf', extracted_content: 'Q3 revenue was up.' }],
+    });
+    expect(out[0]!.messages).toHaveLength(2);
+    expect(out[0]!.messages[1]!.content).toContain('Q3 revenue was up.');
+    expect(out[0]!.messages[1]!.content).toContain('[file: notes.pdf]');
+  });
+
+  it('gives extracted content the parent message’s role and timestamp', () => {
+    const out = withAttachments({
+      sender: 'human',
+      attachments: [{ file_name: 'a.pdf', extracted_content: 'text' }],
+    });
+    const [msg, file] = out[0]!.messages;
+    expect(file!.role).toBe(msg!.role);
+    expect(file!.occurredAt).toEqual(msg!.occurredAt);
+  });
+
+  it('keeps an attachment even when the message itself is empty', () => {
+    const out = withAttachments({
+      text: '', content: [],
+      attachments: [{ file_name: 'only.pdf', extracted_content: 'the only content' }],
+    });
+    expect(out[0]!.messages.some((m) => m.content.includes('the only content'))).toBe(true);
+  });
+
+  it('skips attachments with no extracted content', () => {
+    const out = withAttachments({
+      attachments: [{ file_name: 'image.png', file_type: 'png', extracted_content: '' }],
+    });
+    expect(out[0]!.messages).toHaveLength(1);
+    expect(out[0]!.messages[0]!.content).toContain('[attached: image.png]');
+  });
+});

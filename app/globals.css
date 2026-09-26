@@ -462,3 +462,14 @@ pre.sample {
 @media (max-width: 640px) {
   .source-date { margin-left: 0; width: 100%; }
 }
+
+.folder-form { border-top: 1px solid var(--border); margin-top: var(--sp-4); }
+.folder-input {
+  flex: 1; min-width: 180px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 8px var(--sp-3);
+  font-family: var(--mono); font-size: 12px;
+  transition: border-color var(--t);
+}
+.folder-input:focus { border-color: var(--accent); outline: none; }
+.folder-input::placeholder { color: var(--muted-deep); }

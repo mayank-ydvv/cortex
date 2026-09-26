@@ -25,6 +25,16 @@
  *
  * 4. 37 conversations have no name, so the title falls back through summary to
  *    the first human message. An uncitable result is a failure in this system.
+ *
+ * Files come in two shapes, and only one carries text:
+ *
+ *   files[]       file_uuid + file_name, and file_name is frequently null.
+ *                 Names only, so they are appended to the message as a marker
+ *                 that makes "what did I say about X.pdf" findable.
+ *   attachments[] file_name, file_size, file_type AND extracted_content --
+ *                 real text. That becomes its own message so it is chunked,
+ *                 embedded and searchable like anything else, carrying the
+ *                 parent message's role and timestamp.
  */
 import type { ParsedConversation, ParsedMessage, Parser } from './types';
 
@@ -33,12 +43,26 @@ interface ClaudeBlock {
   text?: string;
 }
 
+interface ClaudeFile {
+  file_uuid?: string;
+  file_name?: string | null;
+}
+
+interface ClaudeAttachment {
+  file_name?: string | null;
+  file_size?: number;
+  file_type?: string;
+  extracted_content?: string;
+}
+
 interface ClaudeMessage {
   uuid?: string;
   text?: string;
   content?: ClaudeBlock[];
   sender?: string;
   created_at?: string;
+  files?: ClaudeFile[];
+  attachments?: ClaudeAttachment[];
 }
 
 interface ClaudeConversation {
@@ -65,6 +89,15 @@ function messageText(m: ClaudeMessage): string {
   const direct = typeof m.text === 'string' ? m.text.trim() : '';
   if (direct !== '') return direct;
   return joinTextBlocks(m.content);
+}
+
+/** Names of anything attached, from either shape. Nulls are common in files[]. */
+function attachedNames(m: ClaudeMessage): string[] {
+  const names = [
+    ...(m.files ?? []).map((f) => f?.file_name),
+    ...(m.attachments ?? []).map((a) => a?.file_name),
+  ];
+  return [...new Set(names.filter((n): n is string => typeof n === 'string' && n.trim() !== ''))];
 }
 
 function parseDate(value: unknown): Date | null {
@@ -109,9 +142,27 @@ export function parseClaudeExport(json: unknown): ParsedConversation[] {
 
     const messages: ParsedMessage[] = [];
     for (const m of raw.chat_messages ?? []) {
-      const content = messageText(m);
-      if (content === '') continue; // tool-only, thinking-only or genuinely empty
-      messages.push({ role: role(m.sender), content, occurredAt: parseDate(m.created_at) });
+      const occurredAt = parseDate(m.created_at);
+      const r = role(m.sender);
+      const names = attachedNames(m);
+
+      let content = messageText(m);
+      // Record what was attached so the file is findable by name, even though
+      // the export carries no bytes for it.
+      if (names.length > 0) {
+        const marker = `[attached: ${names.join(', ')}]`;
+        content = content === '' ? marker : `${content}\n\n${marker}`;
+      }
+      if (content !== '') messages.push({ role: r, content, occurredAt });
+
+      // Attachment text is real content. It becomes its own message so it is
+      // chunked and embedded normally, inheriting this message's time and role.
+      for (const a of m.attachments ?? []) {
+        const extracted = a?.extracted_content?.trim();
+        if (!extracted) continue;
+        const label = a.file_name?.trim() || a.file_type?.trim() || 'attachment';
+        messages.push({ role: r, content: `[file: ${label}]\n\n${extracted}`, occurredAt });
+      }
     }
 
     if (messages.length === 0) continue;

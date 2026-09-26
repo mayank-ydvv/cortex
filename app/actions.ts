@@ -1,5 +1,8 @@
 'use server';
 
+import { readdir, readFile, stat } from 'node:fs/promises';
+import { extname, join, resolve } from 'node:path';
+import { homedir } from 'node:os';
 import { revalidatePath } from 'next/cache';
 import { getSql } from '../src/db/client';
 import {
@@ -441,5 +444,160 @@ export async function ask(question: string): Promise<AskResult> {
       : null,
     cleanedText: r.explain.cleanedText,
     warnings: r.explain.warnings,
+  };
+}
+
+
+/** Extensions read from a folder. Binary formats need a parser we do not have. */
+const FOLDER_EXT = new Set(['.md', '.markdown', '.txt']);
+const MAX_FOLDER_FILES = 2000;
+
+export interface FolderResult {
+  ok: boolean;
+  message: string;
+  hint?: string;
+  scanned: number;
+  summary: IngestSummary | null;
+  pendingEmbeddings: number;
+  skippedTypes: { ext: string; count: number }[];
+}
+
+/**
+ * Index a folder on this machine.
+ *
+ * This reads the local filesystem from a web form, which is only reasonable
+ * because the app is single-user on localhost. The path is resolved and
+ * confined to the home directory: a form value must not be able to walk into
+ * /etc or anywhere else, even here. If this is ever deployed, the whole feature
+ * has to go rather than be tightened.
+ */
+export async function indexFolder(formData: FormData): Promise<FolderResult> {
+  const raw = ((formData.get('path') as string | null) ?? '').trim();
+  const project = ((formData.get('project') as string | null) ?? '').trim() || null;
+
+  const empty: Omit<FolderResult, 'ok' | 'message'> = {
+    scanned: 0, summary: null, pendingEmbeddings: 0, skippedTypes: [],
+  };
+
+  if (raw === '') return { ok: false, message: 'Enter a folder path.', ...empty };
+
+  const home = homedir();
+  const expanded = raw.startsWith('~') ? join(home, raw.slice(1)) : raw;
+  const target = resolve(expanded);
+
+  if (target !== home && !target.startsWith(home + '/')) {
+    return {
+      ok: false,
+      message: 'Only folders inside your home directory can be indexed.',
+      hint: `Paths must live under ${home}.`,
+      ...empty,
+    };
+  }
+
+  let info;
+  try {
+    info = await stat(target);
+  } catch {
+    return { ok: false, message: `No such folder: ${target}`, ...empty };
+  }
+  if (!info.isDirectory()) {
+    return { ok: false, message: `Not a folder: ${target}`, hint: 'Use the file picker above for single files.', ...empty };
+  }
+
+  const found: string[] = [];
+  const skipped = new Map<string, number>();
+
+  async function walk(dir: string): Promise<void> {
+    if (found.length >= MAX_FOLDER_FILES) return;
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return; // unreadable subfolder is skipped, not fatal
+    }
+    for (const e of entries) {
+      if (found.length >= MAX_FOLDER_FILES) return;
+      if (e.name.startsWith('.') || e.name === 'node_modules') continue;
+      const full = join(dir, e.name);
+      if (e.isDirectory()) {
+        await walk(full);
+      } else {
+        const ext = extname(e.name).toLowerCase();
+        if (FOLDER_EXT.has(ext)) found.push(full);
+        else if (ext) skipped.set(ext, (skipped.get(ext) ?? 0) + 1);
+      }
+    }
+  }
+  await walk(target);
+
+  const skippedTypes = [...skipped.entries()]
+    .map(([ext, count]) => ({ ext, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+
+  if (found.length === 0) {
+    return {
+      ok: false,
+      message: `No .md or .txt files found under ${target}.`,
+      hint: skippedTypes.length > 0
+        ? `Other formats were present but cannot be read yet: ${skippedTypes.map((s) => s.ext).join(', ')}.`
+        : undefined,
+      ...empty,
+      skippedTypes,
+    };
+  }
+
+  const conversations: ParsedConversation[] = [];
+  const perFileProject = new Map<string, string | null>();
+  for (const file of found) {
+    const text = await readFile(file, 'utf8');
+    const st = await stat(file);
+    const conv = parseManual({ text, path: file, mtime: st.mtime });
+    conversations.push(conv);
+    perFileProject.set(conv.externalId, project ?? manualProject(text));
+  }
+
+  const sql = getSql();
+  const summary: IngestSummary = {
+    sourcesInserted: 0, sourcesUpdated: 0, sourcesSkipped: 0, chunksCreated: 0,
+    embeddingsReused: 0, embeddingsComputed: 0, timestampsInherited: 0,
+    chunksAwaitingEmbedding: 0, errors: [],
+  };
+
+  const byProject = new Map<string | null, ParsedConversation[]>();
+  for (const c of conversations) {
+    const p = perFileProject.get(c.externalId) ?? null;
+    byProject.set(p, [...(byProject.get(p) ?? []), c]);
+  }
+
+  for (const [groupProject, convs] of byProject) {
+    const part = await ingestConversations(sql, convs, {
+      origin: 'manual',
+      rawPath: target,
+      project: groupProject,
+    });
+    summary.sourcesInserted += part.sourcesInserted;
+    summary.sourcesUpdated += part.sourcesUpdated;
+    summary.sourcesSkipped += part.sourcesSkipped;
+    summary.chunksCreated += part.chunksCreated;
+    summary.embeddingsReused += part.embeddingsReused;
+    summary.timestampsInherited += part.timestampsInherited;
+    summary.errors.push(...part.errors);
+  }
+
+  const [pending] = await sql<{ n: string }[]>`
+    SELECT count(*)::text AS n FROM chunks WHERE embedding IS NULL
+  `;
+
+  revalidatePath('/status');
+  revalidatePath('/browse');
+
+  return {
+    ok: true,
+    message: `Scanned ${found.length} file(s) under ${target}.`,
+    scanned: found.length,
+    summary,
+    pendingEmbeddings: Number(pending?.n ?? 0),
+    skippedTypes,
   };
 }

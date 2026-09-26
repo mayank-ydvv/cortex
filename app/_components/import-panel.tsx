@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useTransition } from 'react';
-import { embedBatch, importFiles, type ImportResult } from '../actions';
+import { embedBatch, importFiles, indexFolder, type FolderResult, type ImportResult } from '../actions';
 import { AlertIcon } from './icons';
 
 /**
@@ -22,6 +22,8 @@ export function ImportPanel({ initialPending }: { initialPending: number }) {
   const [embedTotal, setEmbedTotal] = useState(0);
   const [embedDone, setEmbedDone] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [folder, setFolder] = useState<FolderResult | null>(null);
+  const folderRef = useRef<HTMLFormElement>(null);
 
   async function runEmbedding(total: number) {
     setEmbedding(true);
@@ -55,6 +57,23 @@ export function ImportPanel({ initialPending }: { initialPending: number }) {
         if (r.pendingEmbeddings > 0) await runEmbedding(r.pendingEmbeddings);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
+      }
+    });
+  }
+
+  function onFolder(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    setFolder(null);
+    const data = new FormData(e.currentTarget);
+    startUpload(async () => {
+      try {
+        const r = await indexFolder(data);
+        setFolder(r);
+        setPending(r.pendingEmbeddings);
+        if (r.pendingEmbeddings > 0) await runEmbedding(r.pendingEmbeddings);
+      } catch (e2) {
+        setError(e2 instanceof Error ? e2.message : String(e2));
       }
     });
   }
@@ -94,6 +113,63 @@ export function ImportPanel({ initialPending }: { initialPending: number }) {
           <code>.zip</code> yourself and drop that in instead — it gets unzipped here either way.
         </p>
       </form>
+
+      <form ref={folderRef} onSubmit={onFolder} className="folder-form">
+        <div className="stat-label" style={{ margin: 'var(--sp-4) 0 var(--sp-2)' }}>
+          or index a folder on this Mac
+        </div>
+        <div className="import-row">
+          <input
+            type="text"
+            name="path"
+            placeholder="~/Documents/notes"
+            aria-label="Folder to index"
+            className="folder-input"
+            disabled={isUploading || embedding}
+          />
+          <input
+            type="text"
+            name="project"
+            placeholder="project (optional)"
+            aria-label="Project tag for folder"
+            className="project-input"
+            disabled={isUploading || embedding}
+          />
+          <button className="btn btn-ghost" type="submit" disabled={isUploading || embedding}>
+            index folder
+          </button>
+        </div>
+        <p className="import-hint">
+          Reads <code>.md</code> and <code>.txt</code> recursively, skipping dotfiles and{' '}
+          <code>node_modules</code>. Confined to your home directory. Re-indexing is safe —
+          unchanged files are skipped.
+        </p>
+      </form>
+
+      {folder && (
+        <div className={`notice ${folder.ok ? '' : 'notice-warn'}`} style={{ marginTop: 'var(--sp-3)' }}>
+          {!folder.ok && <span className="notice-icon"><AlertIcon /></span>}
+          <div className="notice-body" style={{ width: '100%' }}>
+            <div className="notice-title">{folder.ok ? 'folder indexed' : 'could not index'}</div>
+            <p>{folder.message}</p>
+            {folder.hint && <p style={{ marginTop: 4, color: 'var(--muted-deep)' }}>{folder.hint}</p>}
+            {folder.summary && (
+              <dl className="kv" style={{ marginTop: 'var(--sp-3)' }}>
+                <dt>inserted</dt><dd>{folder.summary.sourcesInserted}</dd>
+                <dt>updated</dt><dd>{folder.summary.sourcesUpdated}</dd>
+                <dt>skipped</dt><dd>{folder.summary.sourcesSkipped} (unchanged)</dd>
+                <dt>chunks</dt><dd>{folder.summary.chunksCreated}</dd>
+              </dl>
+            )}
+            {folder.skippedTypes.length > 0 && (
+              <p style={{ marginTop: 'var(--sp-2)', color: 'var(--muted-deep)', fontSize: 12 }}>
+                not read (no parser yet):{' '}
+                {folder.skippedTypes.map((t) => `${t.ext} ×${t.count}`).join(', ')}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {(embedding || pending > 0) && (
         <div className="window" style={{ marginTop: 'var(--sp-3)' }}>
