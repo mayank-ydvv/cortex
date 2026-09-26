@@ -14,6 +14,7 @@ import { ExportFetchError, assertAllowedHost, fetchExport } from '../src/ingest/
 import { manualProject, parseManual } from '../src/ingest/parsers/manual';
 import type { Origin, ParsedConversation } from '../src/ingest/parsers/types';
 import { getEmbeddingProvider } from '../src/ingest/embed';
+import { answerQuestion, type AnswerResult } from '../src/answer/index';
 
 export interface ImportedFile {
   name: string;
@@ -397,4 +398,48 @@ async function handleManifest(
       report: { ...report, manifest: { ...report.manifest!, files: vetted } },
     };
   }
+}
+
+
+export interface AskResult {
+  answer: string | null;
+  unavailable: { message: string; hint?: string } | null;
+  model: string | null;
+  sources: {
+    n: number; chunkId: number; sourceId: number; title: string | null;
+    origin: string; occurredAt: string; role: string; content: string;
+    vectorRank: number | null; keywordRank: number | null;
+  }[];
+  timeExpression: string | null;
+  range: { from: string; to: string } | null;
+  cleanedText: string;
+  warnings: string[];
+}
+
+/** Ask a question of your own history. Retrieval first, then a grounded answer. */
+export async function ask(question: string): Promise<AskResult> {
+  const r: AnswerResult = await answerQuestion(question);
+  return {
+    answer: r.answer,
+    unavailable: r.unavailable,
+    model: r.model,
+    sources: r.sources.map((h, i) => ({
+      n: i + 1,
+      chunkId: h.chunkId,
+      sourceId: h.sourceId,
+      title: h.sourceTitle,
+      origin: h.origin,
+      occurredAt: h.occurredAt.toISOString(),
+      role: h.role,
+      content: h.content,
+      vectorRank: h.vectorRank,
+      keywordRank: h.keywordRank,
+    })),
+    timeExpression: r.explain.timeExpression,
+    range: r.explain.range
+      ? { from: r.explain.range.from.toISOString(), to: r.explain.range.to.toISOString() }
+      : null,
+    cleanedText: r.explain.cleanedText,
+    warnings: r.explain.warnings,
+  };
 }

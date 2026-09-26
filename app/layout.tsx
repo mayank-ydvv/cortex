@@ -18,7 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               memory-engine
             </span>
             <nav className="nav" aria-label="Main">
-              <NavLink href="/">search</NavLink>
+              <NavLink href="/">ask</NavLink>
               <NavLink href="/browse">browse</NavLink>
               <NavLink href="/status">status</NavLink>
             </nav>
