@@ -27,7 +27,7 @@ export interface DetectionReport {
    * instead of being reported as an unrecognised export.
    */
   manifest?: {
-    files: { filename: string; category: string }[];
+    files: { filename: string; category: string; url?: string }[];
     conversationsFile: string | null;
     singleUseUrls: boolean;
   };
@@ -44,6 +44,8 @@ function asManifest(json: unknown): DetectionReport['manifest'] | null {
     .map((f) => ({
       filename: String(f.filename ?? '(unnamed)'),
       category: String(f.category ?? 'unknown'),
+      // Only surfaced as a link after the host check below, never rendered raw.
+      url: typeof f.export_url === 'string' ? f.export_url : undefined,
     }));
   if (files.length === 0) return null;
 

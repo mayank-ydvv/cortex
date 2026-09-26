@@ -202,25 +202,36 @@ function ImportReport({ result }: { result: ImportResult }) {
 
             {f.report?.manifest && (
               <div style={{ marginTop: 'var(--sp-3)' }}>
-                <div className="stat-label" style={{ marginBottom: 'var(--sp-2)' }}>
-                  what to do
-                </div>
-                <ol className="manifest-steps">
-                  <li>
-                    Open the manifest and download each <code>export_url</code> in it
-                    {f.report.manifest.singleUseUrls && (
-                      <strong> — each link works only once, so save the file when it downloads</strong>
-                    )}
-                    .
-                  </li>
-                  <li>
-                    You only need{' '}
-                    <code>{f.report.manifest.conversationsFile ?? 'the conversations archive'}</code>
-                    {' '}— the others are metadata, design chats and frames.
-                  </li>
-                  <li>Unzip it (double-click on macOS) to get the conversations JSON.</li>
-                  <li>Upload that file here.</li>
-                </ol>
+                {(() => {
+                  const conv = f.report!.manifest!.files.find((x) => x.category === 'conversations');
+                  return conv?.url ? (
+                    <div className="manifest-cta">
+                      <a className="btn" href={conv.url} download={conv.filename}
+                         rel="noopener noreferrer">
+                        download {conv.filename}
+                      </a>
+                      <p>
+                        Opens with your browser session, which is what the server is missing.
+                        Then drop the <code>.zip</code> straight back here — no unzipping needed.
+                        {f.report!.manifest!.singleUseUrls && (
+                          <strong> This link works only once, so keep the file.</strong>
+                        )}
+                      </p>
+                    </div>
+                  ) : (
+                    <ol className="manifest-steps">
+                      <li>
+                        Open the manifest and download the <code>export_url</code> for the
+                        conversations archive
+                        {f.report!.manifest!.singleUseUrls && (
+                          <strong> — it works only once, so keep the file</strong>
+                        )}
+                        .
+                      </li>
+                      <li>Drop the <code>.zip</code> back here; it is unzipped automatically.</li>
+                    </ol>
+                  );
+                })()}
                 <div className="stat-label" style={{ margin: 'var(--sp-3) 0 var(--sp-1)' }}>
                   files listed in this manifest
                 </div>
@@ -234,8 +245,15 @@ function ImportReport({ result }: { result: ImportResult }) {
                           </span>
                         </td>
                         <td style={{ fontFamily: 'var(--mono)', fontSize: 11.5 }}>{mf.filename}</td>
-                        <td className="num" style={{ color: 'var(--muted-deep)', fontSize: 11 }}>
-                          {mf.category === 'conversations' ? 'this one' : 'not needed'}
+                        <td className="num" style={{ fontSize: 11 }}>
+                          {mf.url && mf.category === 'conversations' ? (
+                            <a href={mf.url} download={mf.filename} rel="noopener noreferrer"
+                               style={{ color: 'var(--accent)' }}>
+                              download
+                            </a>
+                          ) : (
+                            <span style={{ color: 'var(--muted-deep)' }}>not needed</span>
+                          )}
                         </td>
                       </tr>
                     ))}

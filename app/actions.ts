@@ -9,7 +9,7 @@ import {
 } from '../src/ingest/index';
 import { inspectJson, type DetectionReport } from '../src/ingest/parsers/detect';
 import { readArchive } from '../src/ingest/archive';
-import { ExportFetchError, fetchExport } from '../src/ingest/fetch-export';
+import { ExportFetchError, assertAllowedHost, fetchExport } from '../src/ingest/fetch-export';
 import { manualProject, parseManual } from '../src/ingest/parsers/manual';
 import type { ParsedConversation } from '../src/ingest/parsers/types';
 import { getEmbeddingProvider } from '../src/ingest/embed';
@@ -314,6 +314,20 @@ async function handleManifest(
     };
   } catch (err) {
     const fetchErr = err instanceof ExportFetchError ? err : null;
+
+    // Automatic download is blocked, so hand back a direct link instead. Only
+    // links that pass the host check are surfaced -- the URL came from an
+    // uploaded file and must not be rendered unvetted.
+    const vetted = report.manifest!.files.map((f) => {
+      if (!f.url) return { ...f, url: undefined };
+      try {
+        assertAllowedHost(f.url);
+        return f;
+      } catch {
+        return { ...f, url: undefined };
+      }
+    });
+
     return {
       name,
       status: 'manifest',
@@ -323,7 +337,7 @@ async function handleManifest(
       hint:
         fetchErr?.hint ??
         'Download the conversations archive in your browser and upload the .zip here instead.',
-      report,
+      report: { ...report, manifest: { ...report.manifest!, files: vetted } },
     };
   }
 }
