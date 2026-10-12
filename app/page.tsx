@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { Arrow, BrandMark, Doodle, HeroObject, Notebook, Sticker } from './_components/art';
+import { Arrow, BrandMark, Doodle, Notebook, Sticker } from './_components/art';
+import { HeroObject } from './_components/hero-object';
 import { ScrollEffects } from './_components/reveal';
 
 export const metadata = {

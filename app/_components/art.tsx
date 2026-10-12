@@ -211,28 +211,3 @@ export function BrandMark() {
   );
 }
 
-
-/**
- * The hero object, preferring a generated render when one exists.
- *
- * The drawn notebook stays as the fallback so the page is never broken while
- * artwork is being produced; the label is drawn on top either way, so it always
- * carries real numbers rather than being baked into the image.
- */
-export function HeroObject({ src, label, meta }: {
-  src: string; label: string; meta: [string, string];
-}) {
-  return (
-    <span className="hero-object">
-      {/* Drawn version underneath: visible until the image loads, and the only
-          thing shown if the file is absent. */}
-      <Notebook label={label} meta={meta} tilt={-6} />
-      <img
-        src={src}
-        alt=""
-        className="hero-photo"
-        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-      />
-    </span>
-  );
-}
