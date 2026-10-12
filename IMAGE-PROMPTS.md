@@ -1,3 +1,6 @@
+> **Status: supplied.** All files below are in `public/scenes/` and wired up.
+> Keep this file as the spec if you ever want to regenerate or restyle them.
+
 # Cortex — image prompts
 
 Generate these, then drop the files into `public/scenes/` with **exactly these

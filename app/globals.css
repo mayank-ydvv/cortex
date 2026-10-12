@@ -273,12 +273,52 @@ button, input, select, textarea { font: inherit; color: inherit; }
   transform-origin: center;
 }
 .hero-art .nb { width: min(132%, 660px); }
-/* The generated render, when present, sits exactly over the drawn fallback. */
-.hero-object { position: relative; display: block; width: min(132%, 660px); }
-.hero-object .nb { width: 100%; }
-.hero-photo {
-  position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: contain; display: block;
+
+/* ---------- notebook objects ---------- */
+.nb-object { position: relative; display: block; width: 100%; }
+.hero-art .nb-object { width: min(132%, 680px); }
+
+.nb-photo {
+  display: block; width: 100%; height: auto;
+  /* The renders sit on white; multiply drops it to the cream page and keeps
+     the soft drop shadow, which an alpha cut would fringe. */
+  mix-blend-mode: multiply;
+}
+
+/* Laminated name label, drawn over the render. */
+.nb-label {
+  position: absolute;
+  width: 34%;
+  background: #fffdfb;
+  border: 1.4px solid var(--charcoal);
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  box-shadow: rgba(0,0,0,0.12) 0 1px 3px 0;
+  pointer-events: none;
+}
+.nb-label-row { display: flex; }
+.nb-label-top {
+  flex-direction: column; align-items: flex-start;
+  padding: 7% 8% 5%;
+  border-bottom: 1.2px solid var(--charcoal);
+}
+.nb-label-cell {
+  flex: 1; display: flex; align-items: baseline; gap: 6%;
+  padding: 5% 8%;
+}
+.nb-label-cell-r { border-left: 1.2px solid var(--charcoal); justify-content: space-between; }
+.nb-label-key {
+  font-family: var(--font-ui); font-size: clamp(7px, 0.78vw, 11px);
+  color: #8a8178; letter-spacing: 0.01em;
+}
+.nb-label-name {
+  font-family: var(--font-hand); font-size: clamp(16px, 2.3vw, 34px);
+  color: var(--charcoal); line-height: 1; margin-top: 2%;
+}
+.nb-label-val {
+  font-family: var(--font-hand); font-size: clamp(12px, 1.5vw, 22px);
+  color: var(--charcoal); line-height: 1;
 }
 .nb-key  { font-family: var(--font-ui); font-size: 11px; fill: #8a8178; }
 .nb-name { font-family: var(--font-hand); font-size: 34px; fill: #171717; }
@@ -423,8 +463,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
   gap: var(--sp-32); align-items: center;
 }
 .show-item { position: relative; }
-.show-item .nb { width: min(100%, 300px); }
+.show-item .nb, .show-item .nb-object { width: min(100%, 320px); }
 .show-item { overflow: visible; }
+.show-left .nb-object  { margin-right: auto; }
+.show-right .nb-object { margin-left: auto; }
 .show-left .nb  { margin-left: 0; }
 .show-right .nb { margin-left: auto; }
 .show-label { position: relative; margin-bottom: var(--sp-8); }
@@ -468,10 +510,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .hero { grid-template-columns: 1fr; min-height: auto; gap: var(--sp-48);
           padding-top: clamp(90px, 12vh, 120px); }
   .hero-art { order: -1; margin-right: 0; justify-content: center; }
-  .hero-art .nb { width: min(78%, 340px); }
+  .hero-art .nb, .hero-art .nb-object { width: min(80%, 360px); }
   .doodle-grid { grid-template-columns: repeat(2, 1fr); gap: var(--sp-48) var(--sp-24); }
   .showcase { grid-template-columns: 1fr; gap: var(--sp-48); }
-  .show-item .nb { width: min(62%, 260px); margin: 0 auto; }
+  .show-item .nb, .show-item .nb-object { width: min(64%, 270px); margin: 0 auto; }
   .show-label, .show-label-r { text-align: center; }
   .arrow { display: none; }
 

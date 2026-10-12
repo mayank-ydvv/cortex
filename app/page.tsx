@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Arrow, BrandMark, Doodle, Notebook, Sticker } from './_components/art';
-import { HeroObject } from './_components/hero-object';
+import { NotebookObject } from './_components/hero-object';
 import { ScrollEffects } from './_components/reveal';
 
 export const metadata = {
@@ -94,7 +94,7 @@ export default function Landing() {
         </div>
 
         <div className="hero-art reveal" data-delay="2">
-          <HeroObject src="/scenes/notebook-hero.png" label="mayank" meta={['chats', '73']} />
+          <NotebookObject src="/scenes/notebook-hero.webp" label="mayank" meta={['chats', '73']} />
           <Sticker kind="bolt"  rotate={-14} className="st st-a" />
           <Sticker kind="blob"  rotate={11}  className="st st-b" />
           <Sticker kind="heart" rotate={-8}  className="st st-c" />
@@ -211,7 +211,8 @@ export default function Landing() {
             <p className="caption-hand">a whole year of chats</p>
             <Arrow className="show-arrow-l" />
           </div>
-          <Notebook cover="#8fbce8" spine="#6f9ecd" label="claude" meta={['chats', '73']} tilt={-9} />
+          <NotebookObject src="/scenes/notebook-blue.webp" cover="#8fbce8" spine="#6f9ecd"
+                          label="claude" meta={['chats', '73']} tilt={-9} />
         </div>
 
         <div className="show-mid reveal" data-delay="1">
@@ -225,7 +226,8 @@ export default function Landing() {
             <Arrow flip className="show-arrow-r" />
             <p className="caption-hand">and your own notes</p>
           </div>
-          <Notebook cover="#f0b3bd" spine="#d9929e" label="notes" meta={['files', '∞']} tilt={7} />
+          <NotebookObject src="/scenes/notebook-rose.webp" cover="#f0b3bd" spine="#d9929e"
+                          label="notes" meta={['files', '∞']} tilt={7} />
         </div>
       </section>
 
