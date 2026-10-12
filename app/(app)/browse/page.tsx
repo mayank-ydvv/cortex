@@ -1,5 +1,5 @@
-import { checkDb, getCorpusStats, listSources, type SourceRow } from '../../src/db/stats';
-import { SetupNotice } from '../_components/setup-notice';
+import { checkDb, getCorpusStats, listSources, type SourceRow } from '../../../src/db/stats';
+import { SetupNotice } from '../../_components/setup-notice';
 
 export const dynamic = 'force-dynamic';
 

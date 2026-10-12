@@ -86,7 +86,7 @@ class OpenAICompatibleProvider implements AnswerProvider {
         authorization: `Bearer ${this.apiKey}`,
         // OpenRouter asks callers to identify themselves; harmless elsewhere.
         'HTTP-Referer': 'http://localhost:3200',
-        'X-Title': 'memory-engine',
+        'X-Title': 'cortex',
       },
       body: JSON.stringify({
         model: this.model,

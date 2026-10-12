@@ -1,7 +1,7 @@
-import { checkDb, getCorpusStats } from '../../src/db/stats';
-import { SetupNotice } from '../_components/setup-notice';
-import { ImportPanel } from '../_components/import-panel';
-import { AlertIcon } from '../_components/icons';
+import { checkDb, getCorpusStats } from '../../../src/db/stats';
+import { SetupNotice } from '../../_components/setup-notice';
+import { ImportPanel } from '../../_components/import-panel';
+import { AlertIcon } from '../../_components/icons';
 
 export const dynamic = 'force-dynamic';
 

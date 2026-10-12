@@ -1,4 +1,4 @@
-# Personal Memory Engine
+# Cortex
 
 A personal "second brain" over my AI chat history (Claude, ChatGPT) and my own notes.
 It ingests exported conversations into Postgres, chunks them by conversation turn,
