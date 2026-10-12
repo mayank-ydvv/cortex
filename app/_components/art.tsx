@@ -51,6 +51,16 @@ export function Notebook({
         <rect x="330" y="18" width="13" height="494" fill="#00000018" />
       </g>
 
+      {/* pencil tucked alongside, as in every reference frame */}
+      <g transform="translate(372 150) rotate(4)">
+        <rect x="0" y="0" width="22" height="300" rx="4" fill="#f5c542" />
+        <rect x="0" y="0" width="7"  height="300" fill="#00000012" />
+        <rect x="0" y="-26" width="22" height="26" rx="3" fill="#e8a0a8" />
+        <rect x="0" y="-32" width="22" height="7" fill="#c9ccd1" />
+        <path d="M0 300h22l-11 26z" fill="#e8c9a0" />
+        <path d="M5.5 313l5.5 13 5.5-13z" fill="#2b1a07" />
+      </g>
+
       {/* name label */}
       <g transform="translate(96 196)">
         <rect x="0" y="0" width="226" height="104" rx="8" fill="#fffdfb" stroke="#171717" strokeWidth="1.6" />
@@ -198,5 +208,31 @@ export function BrandMark() {
       <path d="M22.6 18v-1.4a2.4 2.4 0 0 1 4.8 0V22c0 4.4-3.2 7.6-7.6 7.6h-2.2c-3 0-4.6-1.4-6.2-3.6l-4-5.6a2.3 2.3 0 0 1 3.6-2.8L13 20"
             fill="none" stroke="#171717" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
+  );
+}
+
+
+/**
+ * The hero object, preferring a generated render when one exists.
+ *
+ * The drawn notebook stays as the fallback so the page is never broken while
+ * artwork is being produced; the label is drawn on top either way, so it always
+ * carries real numbers rather than being baked into the image.
+ */
+export function HeroObject({ src, label, meta }: {
+  src: string; label: string; meta: [string, string];
+}) {
+  return (
+    <span className="hero-object">
+      {/* Drawn version underneath: visible until the image loads, and the only
+          thing shown if the file is absent. */}
+      <Notebook label={label} meta={meta} tilt={-6} />
+      <img
+        src={src}
+        alt=""
+        className="hero-photo"
+        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+      />
+    </span>
   );
 }

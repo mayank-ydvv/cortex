@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Arrow, BrandMark, Doodle, Notebook, Sticker } from './_components/art';
+import { Arrow, BrandMark, Doodle, HeroObject, Notebook, Sticker } from './_components/art';
 import { ScrollEffects } from './_components/reveal';
 
 export const metadata = {
@@ -13,28 +13,28 @@ const STEPS = [
     title: 'remembers what you said',
     body: 'Every conversation you have ever exported, chunked by turn and kept whole — not shredded into arbitrary windows.',
     accent: 'var(--sprout-sticker)',
-    scene: 'scene-grass',
+    scene: 'scene-meadow',
   },
   {
     n: 'II',
     title: 'knows when you said it',
     body: 'Ask for last week and you get last week. Time is a date column with an index, never a guess made by an embedding.',
     accent: 'var(--sky-sticker)',
-    scene: 'scene-sky',
+    scene: 'scene-desk',
   },
   {
     n: 'III',
     title: 'finds the exact words',
     body: 'Name a library, an error code, a person. Keyword search sits beside the vector search so precise terms are never approximated away.',
     accent: 'var(--marker-orange)',
-    scene: 'scene-dusk',
+    scene: 'scene-desk',
   },
   {
     n: 'IV',
     title: 'answers with receipts',
     body: 'Every answer carries the conversation it came from and the date you actually said it. An uncited answer is a bug.',
     accent: 'var(--bubblegum-sticker)',
-    scene: 'scene-rose',
+    scene: 'scene-bed',
   },
   {
     n: 'V',
@@ -45,13 +45,20 @@ const STEPS = [
   },
 ];
 
+/* Scattered, not gridded: each cell gets its own offset and rotation so the
+   row reads as hand-placed, the way the reference does. */
 const DOODLES = [
-  { kind: 'stack' as const, caption: 'every chat in\none place' },
-  { kind: 'clock' as const, caption: '“last week”\nactually means it' },
-  { kind: 'search' as const, caption: 'finds the exact\nword you typed' },
-  { kind: 'quote' as const, caption: 'always shows\nits sources' },
-  { kind: 'page' as const, caption: 'your notes live\nhere too' },
-  { kind: 'lock' as const, caption: 'runs on your\nown machine' },
+  { kind: 'stack'  as const, caption: 'every chat in\none place',        dx: -14, dy: 8,   rot: -4 },
+  { kind: 'clock'  as const, caption: '“last week”\nactually means it',  dx: 10,  dy: -16, rot: 3 },
+  { kind: 'search' as const, caption: 'finds the exact\nword you typed', dx: -6,  dy: 14,  rot: -2 },
+  { kind: 'page'   as const, caption: 'your notes live\nhere too',       dx: 16,  dy: -6,  rot: 5 },
+  { kind: 'quote'  as const, caption: 'always shows\nits sources',       dx: -12, dy: -12, rot: -3 },
+  { kind: 'lock'   as const, caption: 'runs on your\nown machine',       dx: 8,   dy: 10,  rot: 4 },
+];
+
+const NO_LIST = [
+  'no ads', 'no tracking', 'no data-selling', 'no cloud indexing',
+  'no account', 'no telemetry', 'no third-party embeds',
 ];
 
 export default function Landing() {
@@ -86,7 +93,7 @@ export default function Landing() {
         </div>
 
         <div className="hero-art reveal" data-delay="2">
-          <Notebook label="mayank" meta={['chats', '73']} tilt={-6} />
+          <HeroObject src="/scenes/notebook-hero.png" label="mayank" meta={['chats', '73']} />
           <Sticker kind="bolt"  rotate={-14} className="st st-a" />
           <Sticker kind="blob"  rotate={11}  className="st st-b" />
           <Sticker kind="heart" rotate={-8}  className="st st-c" />
@@ -137,15 +144,62 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ---------------- doodle grid ---------------- */}
+      {/* ---------------- scattered doodles ---------------- */}
       <section className="grid-sec">
+        <div className="grid-head reveal">
+          <p className="caption-hand grid-ann">soooo much</p>
+          <h2 className="heading">And there&rsquo;s other<br />cool stuff too!</h2>
+        </div>
         <div className="doodle-grid">
           {DOODLES.map((d, i) => (
-            <figure className="doodle-cell reveal" key={d.kind} data-delay={String((i % 3) + 1)}>
-              <Doodle kind={d.kind} />
+            <figure
+              className="doodle-cell reveal"
+              key={d.kind}
+              data-delay={String((i % 3) + 1)}
+              style={{ transform: `translate(${d.dx}px, ${d.dy}px)` }}
+            >
+              <span className="doodle-wrap" style={{ transform: `rotate(${d.rot}deg)` }}>
+                <Doodle kind={d.kind} />
+              </span>
               <figcaption className="doodle-cap">{d.caption}</figcaption>
             </figure>
           ))}
+        </div>
+      </section>
+
+      {/* ---------------- the no-list ---------------- */}
+      <section className="nolist">
+        <div className="nolist-head reveal">
+          <h2 className="heading">Safe &amp; quiet</h2>
+          <p className="fineprint nolist-sub">We know the no-list matters more than the yes-list.</p>
+        </div>
+
+        <div className="nolist-body">
+          <span className="nolist-side nolist-l1">
+            <Sticker kind="star" rotate={-9} />
+            <em>built for<br />remembering</em>
+          </span>
+          <span className="nolist-side nolist-l2">
+            <Sticker kind="ghost" rotate={7} />
+            <em>nothing<br />phones home</em>
+          </span>
+
+          <div className="notepaper reveal" data-delay="1">
+            <ul>
+              {NO_LIST.map((n) => (
+                <li key={n}><span className="x" aria-hidden>✕</span>{n}</li>
+              ))}
+            </ul>
+          </div>
+
+          <span className="nolist-side nolist-r1">
+            <Sticker kind="spark" rotate={12} />
+            <em>local-first<br />by default</em>
+          </span>
+          <span className="nolist-side nolist-r2">
+            <Sticker kind="heart" rotate={-6} />
+            <em>designed<br />for care</em>
+          </span>
         </div>
       </section>
 

@@ -1,13 +1,16 @@
 /* ===========================================================================
    Warm notebook. Cream paper, one marker, stickers placed by hand.
 
-   Nunito stands in for gelica. The brief lists serif substitutes, but the
-   reference headline has no serifs at all -- it is a heavy rounded sans with
-   circular bowls and soft terminals, and a serif reads bookish beside it.
-   Nunito at 800 carries the same chunky lowercase weight. Geist does the UI
-   work as specified; Caveat supplies the marker hand.
+   The reference uses TWO display faces, which the brief does not say outright
+   but every frame shows: a heavy rounded sans for the hero wordmark headline
+   only, and a serif for every editorial line after it -- "Everyyyyything you'd
+   want", "Safe & Secure", "Our SuperrBook. Our Way." Using one face for both
+   is what made the sections read flat.
+
+   Nunito 800 carries the hero. Fraunces carries the editorial serif. Geist
+   does UI labels, Caveat the marker hand.
    =========================================================================== */
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Geist:wght@400;500;600&family=Caveat:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Geist:wght@400;500;600&family=Caveat:wght@500;600;700&display=swap');
 
 :root {
   /* Colors */
@@ -29,6 +32,7 @@
 
   /* Type */
   --font-display: 'Nunito', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
+  --font-editorial: 'Fraunces', Recoleta, Georgia, serif;
   --font-ui: 'Geist', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-hand: 'Caveat', 'Bradley Hand', cursive;
 
@@ -103,18 +107,21 @@ button, input, select, textarea { font: inherit; color: inherit; }
   text-transform: lowercase;
   margin: 0;
 }
+/* Editorial serif: every display line that is not the hero. */
 .heading {
-  font-family: var(--font-display);
-  font-weight: 700;
+  font-family: var(--font-editorial);
+  font-weight: 500;
   font-size: clamp(28px, 4.2vw, var(--text-heading-lg));
-  line-height: 1.22;
-  letter-spacing: -0.018em;
+  line-height: 1.26;
+  letter-spacing: -0.005em;
   color: var(--cocoa-ink);
   margin: 0;
+  font-variation-settings: 'SOFT' 14, 'opsz' 80;
 }
+.heading-xl { font-size: clamp(32px, 5.2vw, 58px); }
 .heading-sm {
-  font-family: var(--font-display);
-  font-weight: 700;
+  font-family: var(--font-editorial);
+  font-weight: 500;
   font-size: var(--text-heading-sm);
   line-height: 1.4;
   color: var(--cocoa-ink);
@@ -122,7 +129,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .lede {
   font-family: var(--font-display);
-  font-weight: 500;
+  font-weight: 600;
   font-size: clamp(18px, 2.2vw, var(--text-body));
   line-height: 1.5;
   color: var(--cocoa-ink);
@@ -239,25 +246,39 @@ button, input, select, textarea { font: inherit; color: inherit; }
   max-width: var(--page-max);
   margin: 0 auto;
   padding: clamp(100px, 13vh, 150px) var(--sp-24) var(--sp-64);
-  display: grid; grid-template-columns: 1.05fr 1fr;
-  gap: var(--sp-40); align-items: center;
+  display: grid; grid-template-columns: 1fr 1.08fr;
+  gap: var(--sp-32); align-items: center;
   min-height: 100vh;
+  overflow: clip;
 }
 .hero-copy { display: flex; flex-direction: column; gap: var(--sp-20); }
 .hero-copy .display { margin-top: -4px; }
 .hero-cta { margin-top: var(--sp-8); }
 .hero-note { margin-top: var(--sp-12); }
 
+/* The object deliberately breaks the container and crops off the edge --
+   contained, it reads as a tidy product tile rather than something set down
+   on the page. The hero clips rather than scrolls to absorb the overflow. */
 .hero-art {
-  position: relative; display: flex; justify-content: center;
+  position: relative;
+  display: flex; justify-content: flex-start; align-items: center;
+  margin-right: calc(-1 * max(var(--sp-24), (100vw - var(--page-max)) / 2) - 90px);
   transform: translateY(var(--scroll-rise, 0px)) scale(var(--scroll-scale, 1));
-  transform-origin: 50% 40%;
+  transform-origin: 46% 42%;
   will-change: transform;
 }
 .nb {
-  width: min(100%, 420px); height: auto; display: block;
+  width: 100%; max-width: none; height: auto; display: block;
   transform: rotate(var(--tilt, -6deg));
   transform-origin: center;
+}
+.hero-art .nb { width: min(132%, 660px); }
+/* The generated render, when present, sits exactly over the drawn fallback. */
+.hero-object { position: relative; display: block; width: min(132%, 660px); }
+.hero-object .nb { width: 100%; }
+.hero-photo {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; display: block;
 }
 .nb-key  { font-family: var(--font-ui); font-size: 11px; fill: #8a8178; }
 .nb-name { font-family: var(--font-hand); font-size: 34px; fill: #171717; }
@@ -301,18 +322,32 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .walk[data-active='3'] .walk-scene[data-i='3'],
 .walk[data-active='4'] .walk-scene[data-i='4'] { opacity: 1; }
 
-/* Scenes are soft painted washes rather than photographs — the reference uses
-   full-bleed imagery here, and a flat colour block would read as a mistake. */
-.scene-grass { background:
-  radial-gradient(120% 90% at 20% 110%, #9fd07a 0%, #cfe6ad 45%, #eef3dd 100%); }
-.scene-sky   { background:
-  radial-gradient(110% 80% at 80% -10%, #bcdcf7 0%, #dceaf8 50%, #f4f7fb 100%); }
-.scene-dusk  { background:
-  radial-gradient(120% 90% at 10% 0%, #ffd9bd 0%, #ffe9d8 45%, #fdf4ec 100%); }
-.scene-rose  { background:
-  radial-gradient(110% 90% at 85% 100%, #f8cfd6 0%, #fae4e7 50%, #fdf3f4 100%); }
-.scene-paper { background:
-  radial-gradient(120% 90% at 50% 50%, #f7efe9 0%, #fdfbf9 70%); }
+/* Each scene layers the generated image over a painted wash. If the file is
+   absent the wash still reads as a deliberate surface rather than a blank gap,
+   so the page is never broken while artwork is being produced. */
+.walk-scene { background-size: cover; background-position: center; }
+.scene-meadow {
+  background-image: url('/scenes/scene-meadow.jpg');
+  background-color: #cfe6ad;
+}
+.scene-desk {
+  background-image: url('/scenes/scene-desk.jpg');
+  background-color: #f2e2cf;
+}
+.scene-bed {
+  background-image: url('/scenes/scene-bed.jpg');
+  background-color: #f6dfe2;
+}
+.scene-paper {
+  background-image: url('/scenes/scene-paper.jpg');
+  background-color: #f7efe9;
+}
+/* A soft scrim on the left keeps the card legible over busy artwork. */
+.walk-scene::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg,
+    rgba(253,251,249,0.86) 0%, rgba(253,251,249,0.55) 26%, rgba(253,251,249,0) 52%);
+}
 
 .walk-panel {
   position: sticky;
@@ -389,6 +424,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .show-item { position: relative; }
 .show-item .nb { width: min(100%, 300px); }
+.show-item { overflow: visible; }
 .show-left .nb  { margin-left: 0; }
 .show-right .nb { margin-left: auto; }
 .show-label { position: relative; margin-bottom: var(--sp-8); }
@@ -431,8 +467,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 @media (max-width: 900px) {
   .hero { grid-template-columns: 1fr; min-height: auto; gap: var(--sp-48);
           padding-top: clamp(90px, 12vh, 120px); }
-  .hero-art { order: -1; }
-  .nb { width: min(74%, 320px); }
+  .hero-art { order: -1; margin-right: 0; justify-content: center; }
+  .hero-art .nb { width: min(78%, 340px); }
   .doodle-grid { grid-template-columns: repeat(2, 1fr); gap: var(--sp-48) var(--sp-24); }
   .showcase { grid-template-columns: 1fr; gap: var(--sp-48); }
   .show-item .nb { width: min(62%, 260px); margin: 0 auto; }
@@ -743,4 +779,70 @@ pre.sample {
   .thread-actions { display: flex; }
   .kv { grid-template-columns: 1fr; }
   .source-date, .result-date { margin-left: 0; }
+}
+
+
+/* ---------- scattered doodles ---------- */
+.grid-head { text-align: center; margin-bottom: var(--sp-64); position: relative; }
+.grid-ann {
+  position: absolute; top: -34px; left: 50%; transform: translateX(-50%) rotate(-5deg);
+}
+.doodle-wrap { display: block; }
+.doodle-cell { transition: transform var(--t); }
+
+/* ---------- no-list ---------- */
+.nolist {
+  background: var(--dew-drop);
+  padding: var(--sp-116) var(--sp-24);
+}
+.nolist-head { text-align: center; margin-bottom: var(--sp-64); }
+.nolist-sub { margin-top: var(--sp-8); }
+.nolist-body {
+  max-width: var(--page-max); margin: 0 auto; position: relative;
+  display: flex; justify-content: center;
+  min-height: 420px;
+}
+.nolist-side {
+  position: absolute; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  font-family: var(--font-hand); font-size: 19px; line-height: 1.15;
+  color: var(--charcoal); text-align: center;
+}
+.nolist-side .sticker { position: static; width: 34px; }
+.nolist-side em { font-style: normal; }
+.nolist-l1 { left: 4%;  top: 6%; }
+.nolist-l2 { left: 12%; bottom: 8%; }
+.nolist-r1 { right: 12%; top: 6%; }
+.nolist-r2 { right: 4%;  bottom: 8%; }
+
+/* ruled sheet, torn from a notebook and set down slightly askew */
+.notepaper {
+  position: relative;
+  width: min(100%, 390px);
+  background: #fffdfa;
+  border: 1px solid #e8e2d9;
+  border-radius: 3px;
+  padding: var(--sp-32) var(--sp-24) var(--sp-32) var(--sp-48);
+  transform: rotate(-1.6deg);
+  box-shadow: var(--shadow-lg, rgba(0,0,0,0.06) 0 2px 20px 0);
+  background-image: repeating-linear-gradient(
+    transparent, transparent 33px, #dfe8f2 33px, #dfe8f2 34px);
+  background-position: 0 14px;
+}
+/* the red margin rule */
+.notepaper::before {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 30px;
+  width: 1.5px; background: #e9a6a6;
+}
+.notepaper ul { list-style: none; margin: 0; padding: 0; }
+.notepaper li {
+  display: flex; align-items: baseline; gap: 10px;
+  height: 34px;
+  font-family: var(--font-hand); font-size: 23px; color: var(--charcoal);
+}
+.notepaper .x { color: #d94a3d; font-size: 16px; font-family: var(--font-ui); }
+
+@media (max-width: 900px) {
+  .nolist-side { display: none; }
+  .nolist-body { min-height: 0; }
+  .grid-head { margin-bottom: var(--sp-48); }
 }
