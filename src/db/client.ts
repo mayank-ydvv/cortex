@@ -36,3 +36,41 @@ export async function closeDb(): Promise<void> {
     sqlClient = null;
   }
 }
+
+/**
+ * Run work as a specific signed-in user, with RLS enforced.
+ *
+ * This is the single most important function for multi-user safety, and the
+ * reason is subtle: the app connects as `postgres`, which OWNS these tables and
+ * therefore BYPASSES row level security entirely. Policies alone protect
+ * nothing while that is true — they only stop the public PostgREST API.
+ *
+ * Inside this transaction the connection drops to the `authenticated` role and
+ * publishes the user's id as the JWT subject, which is what `auth.uid()` reads.
+ * From that point Postgres itself refuses to return another account's rows, so
+ * a query that forgets its `WHERE user_id = …` returns nothing rather than
+ * someone else's conversations. Application-level filtering is still applied on
+ * top; this is the backstop for when that is wrong.
+ *
+ * Both settings are LOCAL, so they end with the transaction and can never leak
+ * onto the next borrower of a pooled connection.
+ */
+export async function asUser<T>(
+  userId: string,
+  fn: (tx: postgres.TransactionSql) => Promise<T>,
+): Promise<T> {
+  if (!userId) throw new Error('asUser called without a user id');
+
+  // postgres-js unwraps arrays returned from begin(), which loses the caller's
+  // type. Boxing the result keeps the generic honest.
+  const boxed = await getSql().begin(async (tx) => {
+    // auth.uid() reads request.jwt.claims ->> 'sub'.
+    await tx`SELECT set_config('request.jwt.claims', ${JSON.stringify({
+      sub: userId,
+      role: 'authenticated',
+    })}, true)`;
+    await tx`SET LOCAL ROLE authenticated`;
+    return [await fn(tx)] as [T];
+  });
+  return (boxed as unknown as [T])[0];
+}

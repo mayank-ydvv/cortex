@@ -30,6 +30,7 @@ async function main() {
   );
 
   const files = (await readdir(MIGRATIONS_DIR)).filter((f) => f.endsWith('.sql')).sort();
+  // 0003 references auth.users, which only exists on a Supabase database.
 
   let ran = 0;
   for (const file of files) {
