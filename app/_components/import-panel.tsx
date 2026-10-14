@@ -90,7 +90,7 @@ export function ImportPanel({ initialPending }: { initialPending: number }) {
             type="file"
             name="files"
             multiple
-            accept=".md,.markdown,.txt,.json,.zip,application/json,application/zip,text/markdown,text/plain"
+            accept=".md,.markdown,.txt,.docx,.json,.zip,application/json,application/zip,text/markdown,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             aria-label="Files to import"
             disabled={isUploading || embedding}
           />
@@ -107,7 +107,7 @@ export function ImportPanel({ initialPending }: { initialPending: number }) {
           </button>
         </div>
         <p className="import-hint">
-          Notes (<code>.md</code>, <code>.txt</code>) import directly. Drop in your Claude{' '}
+          Notes (<code>.md</code>, <code>.txt</code>) and Word documents (<code>.docx</code>) import directly. Drop in your Claude{' '}
           <code>manifest.json</code> and the conversations archive is downloaded and opened for
           you; if those links need your browser session, download the{' '}
           <code>.zip</code> yourself and drop that in instead — it gets unzipped here either way.
@@ -140,7 +140,7 @@ export function ImportPanel({ initialPending }: { initialPending: number }) {
           </button>
         </div>
         <p className="import-hint">
-          Reads <code>.md</code> and <code>.txt</code> recursively, skipping dotfiles and{' '}
+          Reads <code>.md</code>, <code>.txt</code> and <code>.docx</code> recursively, skipping dotfiles and{' '}
           <code>node_modules</code>. Confined to your home directory. Re-indexing is safe —
           unchanged files are skipped.
         </p>

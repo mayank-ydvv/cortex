@@ -18,6 +18,7 @@ import {
 import { inspectJson } from '../ingest/parsers/detect';
 import { parseExport } from '../ingest/parsers/index';
 import { readArchive } from '../ingest/archive';
+import { extractDocx } from '../ingest/parsers/docx';
 import { manualProject, parseManual } from '../ingest/parsers/manual';
 import type { ParsedConversation } from '../ingest/parsers/types';
 
@@ -32,7 +33,7 @@ const program = new Command()
 const opts = program.opts();
 const target = resolve(program.args[0]!);
 
-const MARKDOWN = new Set(['.md', '.markdown', '.txt']);
+const READABLE = new Set(['.md', '.markdown', '.txt', '.docx']);
 
 async function collectFiles(path: string): Promise<string[]> {
   const info = await stat(path);
@@ -44,7 +45,7 @@ async function collectFiles(path: string): Promise<string[]> {
     if (e.name.startsWith('.')) continue;
     const full = join(path, e.name);
     if (e.isDirectory()) out.push(...(await collectFiles(full)));
-    else if (MARKDOWN.has(extname(e.name).toLowerCase())) out.push(full);
+    else if (READABLE.has(extname(e.name).toLowerCase())) out.push(full);
   }
   return out.sort();
 }
@@ -119,7 +120,7 @@ async function importJson(json: unknown, rawPath: string) {
 async function importNotes() {
   const files = await collectFiles(target);
   if (files.length === 0) {
-    console.log('No .md, .markdown or .txt files found.');
+    console.log('No .md, .txt or .docx files found.');
     return;
   }
 
@@ -129,10 +130,17 @@ async function importNotes() {
   const projects = new Map<string, string | null>();
 
   for (const file of files) {
-    const text = await readFile(file, 'utf8');
     const info2 = await stat(file);
-    conversations.push(parseManual({ text, path: file, mtime: info2.mtime }));
-    projects.set(file, opts.project ?? manualProject(text));
+    const isDocx = extname(file).toLowerCase() === '.docx';
+    const text = isDocx
+      ? extractDocx(new Uint8Array(await readFile(file))).text
+      : await readFile(file, 'utf8');
+    if (text.trim() === '') continue;
+
+    const conv = parseManual({ text, path: file, mtime: info2.mtime });
+    if (isDocx) conv.title = file.split('/').pop()!.replace(/\.docx$/i, '');
+    conversations.push(conv);
+    projects.set(file, opts.project ?? (isDocx ? null : manualProject(text)));
   }
 
   const sql = getSql();

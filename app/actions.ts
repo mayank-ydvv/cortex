@@ -12,6 +12,7 @@ import {
 } from '../src/ingest/index';
 import { inspectJson, type DetectionReport } from '../src/ingest/parsers/detect';
 import { readArchive } from '../src/ingest/archive';
+import { extractDocx, looksLikeDocx } from '../src/ingest/parsers/docx';
 import { parseExport } from '../src/ingest/parsers/index';
 import { ExportFetchError, assertAllowedHost, fetchExport } from '../src/ingest/fetch-export';
 import { manualProject, parseManual } from '../src/ingest/parsers/manual';
@@ -78,8 +79,48 @@ export async function importFiles(formData: FormData): Promise<ImportResult> {
         continue;
       }
 
+      if (file.name.toLowerCase().endsWith('.docx')) {
+        const { text: body, parts } = extractDocx(new Uint8Array(await file.arrayBuffer()));
+        if (body.trim() === '') {
+          files.push({
+            name: file.name,
+            status: 'skipped',
+            message: 'No readable text in this document.',
+            hint: parts.length
+              ? 'It may be image-only, or the text may live in headers or footnotes, which are not read.'
+              : undefined,
+          });
+          continue;
+        }
+        const conv = parseManual({
+          text: body,
+          path: `upload://${file.name}`,
+          mtime: new Date(file.lastModified),
+        });
+        // Keep the filename as the title; a docx has no frontmatter to carry one.
+        conv.title = file.name.replace(/\.docx$/i, '');
+        conversations.push(conv);
+        projects.set(conv.externalId, project);
+        files.push({
+          name: file.name,
+          status: 'imported',
+          message: `Extracted ${body.length.toLocaleString()} characters of text.`,
+        });
+        continue;
+      }
+
       if (file.name.toLowerCase().endsWith('.zip')) {
-        const archive = readArchive(new Uint8Array(await file.arrayBuffer()));
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const archive = readArchive(bytes);
+        if (looksLikeDocx(archive.entries.map((e) => e.name))) {
+          files.push({
+            name: file.name,
+            status: 'skipped',
+            message: 'This is a Word document saved with a .zip extension.',
+            hint: 'Rename it to .docx and upload again.',
+          });
+          continue;
+        }
         files.push(describeArchive(file.name, archive, 'uploaded archive'));
         continue;
       }
@@ -449,7 +490,7 @@ export async function ask(question: string): Promise<AskResult> {
 
 
 /** Extensions read from a folder. Binary formats need a parser we do not have. */
-const FOLDER_EXT = new Set(['.md', '.markdown', '.txt']);
+const FOLDER_EXT = new Set(['.md', '.markdown', '.txt', '.docx']);
 const MAX_FOLDER_FILES = 2000;
 
 export interface FolderResult {
@@ -550,11 +591,19 @@ export async function indexFolder(formData: FormData): Promise<FolderResult> {
   const conversations: ParsedConversation[] = [];
   const perFileProject = new Map<string, string | null>();
   for (const file of found) {
-    const text = await readFile(file, 'utf8');
     const st = await stat(file);
+    const isDocx = extname(file).toLowerCase() === '.docx';
+
+    const text = isDocx
+      ? extractDocx(new Uint8Array(await readFile(file))).text
+      : await readFile(file, 'utf8');
+    if (text.trim() === '') continue;
+
     const conv = parseManual({ text, path: file, mtime: st.mtime });
+    if (isDocx) conv.title = file.split('/').pop()!.replace(/\.docx$/i, '');
     conversations.push(conv);
-    perFileProject.set(conv.externalId, project ?? manualProject(text));
+    // Only markdown carries frontmatter, so only it can name its own project.
+    perFileProject.set(conv.externalId, project ?? (isDocx ? null : manualProject(text)));
   }
 
   const sql = getSql();
