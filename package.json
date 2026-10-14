@@ -17,7 +17,7 @@
     "typecheck": "tsc --noEmit",
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p ${PORT:-3000}",
     "ask": "tsx --env-file-if-exists=.env src/cli/ask.ts"
   },
   "dependencies": {

@@ -536,6 +536,17 @@ export async function ask(question: string): Promise<AskResult> {
 }
 
 
+/**
+ * True only for a local install.
+ *
+ * CORTEX_LOCAL is set explicitly in .env rather than inferred from NODE_ENV,
+ * because `next start` in production mode on a laptop is still local and
+ * should keep the feature.
+ */
+export async function isLocalInstall(): Promise<boolean> {
+  return process.env.CORTEX_LOCAL === 'true';
+}
+
 /** Extensions read from a folder. Binary formats need a parser we do not have. */
 const FOLDER_EXT = new Set(['.md', '.markdown', '.txt', '.docx', '.pdf']);
 const MAX_FOLDER_FILES = 2000;
@@ -560,6 +571,19 @@ export interface FolderResult {
  * has to go rather than be tightened.
  */
 export async function indexFolder(formData: FormData): Promise<FolderResult> {
+  // Reads the SERVER's filesystem. That is the user's own machine when running
+  // locally, and the deployment container when hosted -- where it is both
+  // useless and a bad pattern. Disabled off localhost rather than tightened,
+  // which is what the feature's own comment said would have to happen.
+  if (!isLocalInstall()) {
+    return {
+      ok: false,
+      message: 'Folder indexing only works when Cortex runs on your own machine.',
+      hint: 'On the hosted version, upload files instead — the panel above accepts .md, .txt, .docx and .pdf.',
+      scanned: 0, summary: null, pendingEmbeddings: 0, skippedTypes: [],
+    };
+  }
+
   const user = await requireUser();
   const raw = ((formData.get('path') as string | null) ?? '').trim();
   const project = ((formData.get('project') as string | null) ?? '').trim() || null;

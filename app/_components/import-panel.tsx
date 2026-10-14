@@ -13,7 +13,10 @@ import { AlertIcon } from './icons';
  * the nullable-embedding column that already makes ingest resumable — if you
  * close the tab midway, the remaining chunks are picked up next time.
  */
-export function ImportPanel({ initialPending }: { initialPending: number }) {
+export function ImportPanel({
+  initialPending,
+  showFolder = false,
+}: { initialPending: number; showFolder?: boolean }) {
   const formRef = useRef<HTMLFormElement>(null);
   const [isUploading, startUpload] = useTransition();
   const [result, setResult] = useState<ImportResult | null>(null);
@@ -114,6 +117,7 @@ export function ImportPanel({ initialPending }: { initialPending: number }) {
         </p>
       </form>
 
+      {showFolder && (
       <form ref={folderRef} onSubmit={onFolder} className="folder-form">
         <div className="stat-label" style={{ margin: 'var(--sp-4) 0 var(--sp-2)' }}>
           or index a folder on this Mac
@@ -145,6 +149,7 @@ export function ImportPanel({ initialPending }: { initialPending: number }) {
           unchanged files are skipped.
         </p>
       </form>
+      )}
 
       {folder && (
         <div className={`notice ${folder.ok ? '' : 'notice-warn'}`} style={{ marginTop: 'var(--sp-3)' }}>

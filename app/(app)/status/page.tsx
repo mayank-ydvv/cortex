@@ -1,6 +1,7 @@
 import { checkDb, getCorpusStats } from '../../../src/db/stats';
 import { SetupNotice } from '../../_components/setup-notice';
 import { ImportPanel } from '../../_components/import-panel';
+import { isLocalInstall } from '../../actions';
 import { AlertIcon } from '../../_components/icons';
 import { requireUser } from '../../../src/auth/server';
 
@@ -23,7 +24,7 @@ export default async function StatusPage() {
 
   return (
     <>
-      <ImportPanel initialPending={s.awaitingEmbedding} />
+      <ImportPanel initialPending={s.awaitingEmbedding} showFolder={await isLocalInstall()} />
 
       {s.awaitingEmbedding > 0 && (
         <div className="notice notice-danger">
