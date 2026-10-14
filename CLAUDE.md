@@ -119,7 +119,9 @@ pnpm seed:fixtures                                 # synthetic chunks for dev
 Uploads on the status page accept .md, .txt and .docx directly. A .docx is a
 zip of XML, so it is read with fflate rather than a new dependency; only body
 text is extracted, and tracked deletions are dropped so the text reads as the
-current version. PDF still needs a parser library. A Claude or ChatGPT .json
+current version. PDFs are read with unpdf, a pure-JS pdf.js build with no native binaries, so
+it survives a serverless deploy. A scanned PDF has no characters to extract and
+is reported as such rather than imported empty. A Claude or ChatGPT .json
 export is not parsed -- it prints the file's real structure instead, which is what a
 parser must be written against.
 ```

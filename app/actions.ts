@@ -13,6 +13,7 @@ import {
 import { inspectJson, type DetectionReport } from '../src/ingest/parsers/detect';
 import { readArchive } from '../src/ingest/archive';
 import { extractDocx, looksLikeDocx } from '../src/ingest/parsers/docx';
+import { extractPdf, looksLikePdf } from '../src/ingest/parsers/pdf';
 import { parseExport } from '../src/ingest/parsers/index';
 import { ExportFetchError, assertAllowedHost, fetchExport } from '../src/ingest/fetch-export';
 import { manualProject, parseManual } from '../src/ingest/parsers/manual';
@@ -76,6 +77,44 @@ export async function importFiles(formData: FormData): Promise<ImportResult> {
         conversations.push(conv);
         projects.set(conv.externalId, project ?? manualProject(text));
         files.push({ name: file.name, status: 'imported', message: 'queued for import' });
+        continue;
+      }
+
+      if (file.name.toLowerCase().endsWith('.pdf')) {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        if (!looksLikePdf(bytes)) {
+          files.push({
+            name: file.name,
+            status: 'error',
+            message: 'Named .pdf but does not start with a PDF header.',
+          });
+          continue;
+        }
+        const { text: body, pages, likelyScanned } = await extractPdf(bytes);
+        if (likelyScanned || body.trim() === '') {
+          files.push({
+            name: file.name,
+            status: 'skipped',
+            message: `${pages} page(s), but no extractable text.`,
+            hint: likelyScanned
+              ? 'This looks like a scan — the pages are images, so there are no characters to read. It would need OCR.'
+              : undefined,
+          });
+          continue;
+        }
+        const conv = parseManual({
+          text: body,
+          path: `upload://${file.name}`,
+          mtime: new Date(file.lastModified),
+        });
+        conv.title = file.name.replace(/\.pdf$/i, '');
+        conversations.push(conv);
+        projects.set(conv.externalId, project);
+        files.push({
+          name: file.name,
+          status: 'imported',
+          message: `Extracted ${body.length.toLocaleString()} characters from ${pages} page(s).`,
+        });
         continue;
       }
 
@@ -490,7 +529,7 @@ export async function ask(question: string): Promise<AskResult> {
 
 
 /** Extensions read from a folder. Binary formats need a parser we do not have. */
-const FOLDER_EXT = new Set(['.md', '.markdown', '.txt', '.docx']);
+const FOLDER_EXT = new Set(['.md', '.markdown', '.txt', '.docx', '.pdf']);
 const MAX_FOLDER_FILES = 2000;
 
 export interface FolderResult {
@@ -592,18 +631,24 @@ export async function indexFolder(formData: FormData): Promise<FolderResult> {
   const perFileProject = new Map<string, string | null>();
   for (const file of found) {
     const st = await stat(file);
-    const isDocx = extname(file).toLowerCase() === '.docx';
+    const ext = extname(file).toLowerCase();
+    const isDocx = ext === '.docx';
+    const isPdf = ext === '.pdf';
+    const isBinaryDoc = isDocx || isPdf;
 
-    const text = isDocx
-      ? extractDocx(new Uint8Array(await readFile(file))).text
-      : await readFile(file, 'utf8');
+    let text: string;
+    if (isPdf) text = (await extractPdf(new Uint8Array(await readFile(file)))).text;
+    else if (isDocx) text = extractDocx(new Uint8Array(await readFile(file))).text;
+    else text = await readFile(file, 'utf8');
+    // A scanned PDF or an image-only doc yields nothing; skip rather than
+    // storing an empty source that would look imported but match nothing.
     if (text.trim() === '') continue;
 
     const conv = parseManual({ text, path: file, mtime: st.mtime });
-    if (isDocx) conv.title = file.split('/').pop()!.replace(/\.docx$/i, '');
+    if (isBinaryDoc) conv.title = file.split('/').pop()!.replace(/\.(docx|pdf)$/i, '');
     conversations.push(conv);
     // Only markdown carries frontmatter, so only it can name its own project.
-    perFileProject.set(conv.externalId, project ?? (isDocx ? null : manualProject(text)));
+    perFileProject.set(conv.externalId, project ?? (isBinaryDoc ? null : manualProject(text)));
   }
 
   const sql = getSql();

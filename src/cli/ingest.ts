@@ -19,6 +19,7 @@ import { inspectJson } from '../ingest/parsers/detect';
 import { parseExport } from '../ingest/parsers/index';
 import { readArchive } from '../ingest/archive';
 import { extractDocx } from '../ingest/parsers/docx';
+import { extractPdf } from '../ingest/parsers/pdf';
 import { manualProject, parseManual } from '../ingest/parsers/manual';
 import type { ParsedConversation } from '../ingest/parsers/types';
 
@@ -33,7 +34,7 @@ const program = new Command()
 const opts = program.opts();
 const target = resolve(program.args[0]!);
 
-const READABLE = new Set(['.md', '.markdown', '.txt', '.docx']);
+const READABLE = new Set(['.md', '.markdown', '.txt', '.docx', '.pdf']);
 
 async function collectFiles(path: string): Promise<string[]> {
   const info = await stat(path);
@@ -120,7 +121,7 @@ async function importJson(json: unknown, rawPath: string) {
 async function importNotes() {
   const files = await collectFiles(target);
   if (files.length === 0) {
-    console.log('No .md, .txt or .docx files found.');
+    console.log('No .md, .txt, .docx or .pdf files found.');
     return;
   }
 
@@ -131,16 +132,24 @@ async function importNotes() {
 
   for (const file of files) {
     const info2 = await stat(file);
-    const isDocx = extname(file).toLowerCase() === '.docx';
-    const text = isDocx
-      ? extractDocx(new Uint8Array(await readFile(file))).text
-      : await readFile(file, 'utf8');
-    if (text.trim() === '') continue;
+    const ext = extname(file).toLowerCase();
+    const isDocx = ext === '.docx';
+    const isPdf = ext === '.pdf';
+    const isBinaryDoc = isDocx || isPdf;
+
+    let text: string;
+    if (isPdf) text = (await extractPdf(new Uint8Array(await readFile(file)))).text;
+    else if (isDocx) text = extractDocx(new Uint8Array(await readFile(file))).text;
+    else text = await readFile(file, 'utf8');
+    if (text.trim() === '') {
+      console.log(`  skip    ${file.split('/').pop()} (no extractable text)`);
+      continue;
+    }
 
     const conv = parseManual({ text, path: file, mtime: info2.mtime });
-    if (isDocx) conv.title = file.split('/').pop()!.replace(/\.docx$/i, '');
+    if (isBinaryDoc) conv.title = file.split('/').pop()!.replace(/\.(docx|pdf)$/i, '');
     conversations.push(conv);
-    projects.set(file, opts.project ?? (isDocx ? null : manualProject(text)));
+    projects.set(file, opts.project ?? (isBinaryDoc ? null : manualProject(text)));
   }
 
   const sql = getSql();

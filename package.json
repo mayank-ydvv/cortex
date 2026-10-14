@@ -30,7 +30,8 @@
     "next": "16.3.5",
     "postgres": "^3.4.9",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "unpdf": "1.8.1"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
