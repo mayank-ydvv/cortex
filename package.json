@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit",
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "ask": "tsx --env-file-if-exists=.env src/cli/ask.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.0",

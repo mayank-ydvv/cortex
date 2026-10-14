@@ -112,6 +112,7 @@ pnpm migrate                                       # apply drizzle/*.sql
 pnpm ingest <path> [--project p] [--dry-run]       # import an export file (CLI only)
 pnpm dev                                           # web UI on localhost:3200
 pnpm test                                          # vitest unit tests
+pnpm ask "<question>" [--sources]                  # grounded answer from the terminal
 pnpm test:golden                                   # precision@5 / recall@5 by category
 pnpm seed:fixtures                                 # synthetic chunks for dev
 
