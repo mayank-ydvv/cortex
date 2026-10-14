@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { requireUser } from '../src/auth/server';
 import { answerQuestion } from '../src/answer/index';
 import {
   appendMessage,
@@ -41,11 +42,15 @@ const toClientThread = (t: ThreadSummary): ClientThread => ({
 });
 
 export async function fetchThreads(): Promise<ClientThread[]> {
-  return (await listThreads()).map(toClientThread);
+  const user = await requireUser();
+  return (await listThreads(user.id)).map(toClientThread);
 }
 
 export async function fetchMessages(threadId: number): Promise<ClientMessage[]> {
-  return (await getMessages(threadId)).map((m) => ({
+  const user = await requireUser();
+  // Scoped by user, so passing another account's thread id returns nothing
+  // rather than their conversation.
+  return (await getMessages(user.id, threadId)).map((m) => ({
     id: m.id,
     role: m.role,
     content: m.content,
@@ -75,12 +80,13 @@ export async function sendMessage(
   threadId: number | null,
   question: string,
 ): Promise<SendResult> {
+  const user = await requireUser();
   const q = question.trim();
   if (q === '') throw new Error('Empty message.');
 
-  const existing = threadId ? await getMessages(threadId) : [];
+  const existing = threadId ? await getMessages(user.id, threadId) : [];
 
-  const id = threadId ?? (await createThread(titleFromQuestion(q)));
+  const id = threadId ?? (await createThread(user.id, titleFromQuestion(q)));
   const title = threadId
     ? ''
     : titleFromQuestion(q);
@@ -94,6 +100,7 @@ export async function sendMessage(
   const priorQuestions = existing.filter((m) => m.role === 'user').map((m) => m.content);
 
   const result = await answerQuestion(q, {
+    userId: user.id,
     history,
     retrieveWith: retrievalQuery(q, priorQuestions),
   });
@@ -111,12 +118,13 @@ export async function sendMessage(
     keywordRank: h.keywordRank,
   }));
 
-  const userId = await appendMessage(id, 'user', q);
+  const userMessageId = await appendMessage(user.id, id, 'user', q);
   const note = result.answer
     ? null
     : [result.unavailable?.message, result.unavailable?.hint].filter(Boolean).join(' ');
 
   const assistantId = await appendMessage(
+    user.id,
     id,
     'assistant',
     result.answer ?? '',
@@ -124,12 +132,12 @@ export async function sendMessage(
     note || null,
   );
 
-  revalidatePath('/');
+  revalidatePath('/ask');
 
   return {
     threadId: id,
-    title: title || (await listThreads()).find((t) => t.id === id)?.title || '',
-    userMessage: { id: userId, role: 'user', content: q, sources: null, note: null },
+    title: title || (await listThreads(user.id)).find((t) => t.id === id)?.title || '',
+    userMessage: { id: userMessageId, role: 'user', content: q, sources: null, note: null },
     assistantMessage: {
       id: assistantId,
       role: 'assistant',
@@ -150,13 +158,15 @@ export async function sendMessage(
 }
 
 export async function deleteThread(threadId: number): Promise<void> {
-  await removeThread(threadId);
-  revalidatePath('/');
+  const user = await requireUser();
+  await removeThread(user.id, threadId);
+  revalidatePath('/ask');
 }
 
 export async function renameThread(threadId: number, title: string): Promise<void> {
+  const user = await requireUser();
   const clean = title.trim();
   if (clean === '') return;
-  await setTitle(threadId, clean.slice(0, 120));
-  revalidatePath('/');
+  await setTitle(user.id, threadId, clean.slice(0, 120));
+  revalidatePath('/ask');
 }

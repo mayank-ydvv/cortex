@@ -6,7 +6,7 @@
  * memories, and indexing them would have the engine answering out of its own
  * previous output.
  */
-import { getSql } from '../db/client';
+import { asUser } from '../db/client';
 
 export interface StoredSource {
   n: number;
@@ -48,24 +48,25 @@ export function titleFromQuestion(question: string): string {
   return line.length > 60 ? `${line.slice(0, 60).trimEnd()}…` : line;
 }
 
-export async function createThread(title: string): Promise<number> {
-  const sql = getSql();
-  const [row] = await sql<{ id: number }[]>`
-    INSERT INTO chat_threads (title) VALUES (${title}) RETURNING id
-  `;
-  return row!.id;
+export async function createThread(userId: string, title: string): Promise<number> {
+  return asUser(userId, async (tx) => {
+    const [row] = await tx<{ id: number }[]>`
+      INSERT INTO chat_threads (user_id, title) VALUES (${userId}, ${title}) RETURNING id
+    `;
+    return row!.id;
+  });
 }
 
-export async function listThreads(limit = 100): Promise<ThreadSummary[]> {
-  const sql = getSql();
-  const rows = await sql<{ id: number; title: string; updated_at: Date; n: string }[]>`
+export async function listThreads(userId: string, limit = 100): Promise<ThreadSummary[]> {
+  const rows = await asUser(userId, (tx) => tx<{ id: number; title: string; updated_at: Date; n: string }[]>`
     SELECT t.id, t.title, t.updated_at, count(m.id)::text AS n
     FROM chat_threads t
     LEFT JOIN chat_messages m ON m.thread_id = t.id
+    WHERE t.user_id = ${userId}
     GROUP BY t.id
     ORDER BY t.updated_at DESC
     LIMIT ${limit}
-  `;
+  `);
   return rows.map((r) => ({
     id: r.id,
     title: r.title,
@@ -74,15 +75,16 @@ export async function listThreads(limit = 100): Promise<ThreadSummary[]> {
   }));
 }
 
-export async function getMessages(threadId: number): Promise<StoredMessage[]> {
-  const sql = getSql();
-  const rows = await sql<{
+export async function getMessages(userId: string, threadId: number): Promise<StoredMessage[]> {
+  const rows = await asUser(userId, (tx) => tx<{
     id: number; role: 'user' | 'assistant'; content: string;
     sources: StoredSource[] | null; note: string | null; created_at: Date;
   }[]>`
     SELECT id, role, content, sources, note, created_at
-    FROM chat_messages WHERE thread_id = ${threadId} ORDER BY id
-  `;
+    FROM chat_messages
+    WHERE thread_id = ${threadId} AND user_id = ${userId}
+    ORDER BY id
+  `);
   return rows.map((r) => ({
     id: r.id,
     role: r.role,
@@ -94,31 +96,35 @@ export async function getMessages(threadId: number): Promise<StoredMessage[]> {
 }
 
 export async function appendMessage(
+  userId: string,
   threadId: number,
   role: 'user' | 'assistant',
   content: string,
   sources?: StoredSource[] | null,
   note?: string | null,
 ): Promise<number> {
-  const sql = getSql();
-  const [row] = await sql<{ id: number }[]>`
-    INSERT INTO chat_messages (thread_id, role, content, sources, note)
-    VALUES (${threadId}, ${role}, ${content},
-            ${sources ? sql.json(sources as never) : null}, ${note ?? null})
-    RETURNING id
-  `;
-  await sql`UPDATE chat_threads SET updated_at = now() WHERE id = ${threadId}`;
-  return row!.id;
+  return asUser(userId, async (tx) => {
+    const [row] = await tx<{ id: number }[]>`
+      INSERT INTO chat_messages (user_id, thread_id, role, content, sources, note)
+      VALUES (${userId}, ${threadId}, ${role}, ${content},
+              ${sources ? tx.json(sources as never) : null}, ${note ?? null})
+      RETURNING id
+    `;
+    await tx`UPDATE chat_threads SET updated_at = now()
+             WHERE id = ${threadId} AND user_id = ${userId}`;
+    return row!.id;
+  });
 }
 
-export async function deleteThread(threadId: number): Promise<void> {
-  const sql = getSql();
-  await sql`DELETE FROM chat_threads WHERE id = ${threadId}`;
+export async function deleteThread(userId: string, threadId: number): Promise<void> {
+  await asUser(userId, (tx) =>
+    tx`DELETE FROM chat_threads WHERE id = ${threadId} AND user_id = ${userId}`);
 }
 
-export async function renameThread(threadId: number, title: string): Promise<void> {
-  const sql = getSql();
-  await sql`UPDATE chat_threads SET title = ${title} WHERE id = ${threadId}`;
+export async function renameThread(userId: string, threadId: number, title: string): Promise<void> {
+  await asUser(userId, (tx) =>
+    tx`UPDATE chat_threads SET title = ${title}
+       WHERE id = ${threadId} AND user_id = ${userId}`);
 }
 
 /**

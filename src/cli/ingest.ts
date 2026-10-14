@@ -9,6 +9,7 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import { Command } from 'commander';
 import { closeDb, getSql } from '../db/client';
+import { resolveUserId } from '../auth/cli-user';
 import {
   embedPendingChunks,
   formatSummary,
@@ -29,6 +30,7 @@ const program = new Command()
   .option('-p, --project <name>', 'tag imported sources with a project')
   .option('--dry-run', 'report what would happen without writing or embedding')
   .option('--inspect', 'print the structure of a JSON export and exit')
+  .option('--as <email>', 'account to import into (or set CORTEX_USER)')
   .parse();
 
 const opts = program.opts();
@@ -84,7 +86,9 @@ async function importJson(json: unknown, rawPath: string) {
       `\nRecognised a ${recognised.origin} export: ${recognised.conversations.length} conversation(s).\n`,
     );
     const sql = getSql();
+    const userId = await resolveUserId(opts.as);
     const summary = await ingestConversations(sql, recognised.conversations, {
+      userId,
       origin: recognised.origin,
       rawPath,
       project: opts.project ?? null,
@@ -97,7 +101,7 @@ async function importJson(json: unknown, rawPath: string) {
       console.log('\n(dry run - nothing was written and nothing was embedded)');
       return;
     }
-    await embedPendingChunks(sql, summary, (l) => console.log(l));
+    await embedPendingChunks(sql, userId, summary, (l: string) => console.log(l));
     console.log(formatSummary(summary));
     return;
   }
@@ -153,6 +157,7 @@ async function importNotes() {
   }
 
   const sql = getSql();
+  const userId = await resolveUserId(opts.as);
   let summary: IngestSummary;
 
   // Group by project so each import carries the right tag.
@@ -170,6 +175,7 @@ async function importNotes() {
 
   for (const [project, convs] of byProject) {
     summary = await ingestConversations(sql, convs, {
+      userId,
       origin: 'manual',
       rawPath: target,
       project,
@@ -191,7 +197,7 @@ async function importNotes() {
     return;
   }
 
-  await embedPendingChunks(sql, merged, (l) => console.log(l));
+  await embedPendingChunks(sql, userId, merged, (l: string) => console.log(l));
   console.log(formatSummary(merged));
 }
 

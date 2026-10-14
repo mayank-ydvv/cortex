@@ -5,7 +5,7 @@
  * identical candidate set. If they diverged, RRF would be fusing two lists drawn
  * from different populations and the fused ranks would be meaningless.
  */
-import postgres from 'postgres';
+import type { Sql } from './sql-type';
 
 export interface CandidateFilter {
   from?: Date | null;
@@ -18,7 +18,7 @@ export interface CandidateFilter {
  * passed as null comparisons, so the planner sees a plain range predicate it can
  * satisfy from chunks_occurred_at_idx.
  */
-export function buildWhere(sql: postgres.Sql, f: CandidateFilter) {
+export function buildWhere(sql: Sql, f: CandidateFilter) {
   const parts = [sql`c.embedding IS NOT NULL`];
   if (f.from) parts.push(sql`c.occurred_at >= ${f.from}`);
   if (f.to) parts.push(sql`c.occurred_at < ${f.to}`);

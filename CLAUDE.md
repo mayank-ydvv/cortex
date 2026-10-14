@@ -149,13 +149,36 @@ bypass the parser, which isolates parser bugs from retrieval bugs.
 
 No API keys. Embeddings are local.
 
+## Accounts and isolation
+
+Cortex is multi-user. Every row in `sources`, `chunks`, `chat_threads`,
+`chat_messages` and `memories` carries a `user_id`, and each table has an RLS
+policy keyed on `auth.uid()`.
+
+**The policies are not what protects you on their own.** The app connects as
+`postgres`, which owns these tables and therefore bypasses RLS entirely. All
+user-facing database work must go through `asUser()` in `src/db/client.ts`,
+which opens a transaction, drops to the `authenticated` role and publishes the
+user's id as the JWT subject. Only then does Postgres itself refuse to return
+another account's rows. A query outside `asUser` runs with full visibility.
+
+`search()` throws rather than running without a `userId`, because falling back
+would silently search every account's corpus.
+
+The CLIs have no session, so they take `--as you@example.com` or `CORTEX_USER`.
+They run on the owner connection by design -- they are operator tools.
+
 ## Standing rules
 
 **1. Any change to retrieval must be re-validated against the golden set.**
 Run `pnpm test:golden` and check the per-category breakdown, not just the aggregate. An
 overall score hides the case where every time-scoped query has started failing.
 
-**2. Original message timestamps are sacred. Never substitute import time.**
+**2. Never query user data outside `asUser`.** Row level security does not
+apply to the owner connection, so a direct query sees every account. If a new
+code path needs user data, it goes through `asUser` and takes a `userId`.
+
+**3. Original message timestamps are sacred. Never substitute import time.**
 `chunks.occurred_at` is the message's own timestamp. If a message has none, inherit the
 conversation's `started_at` — never `now()`. Using import time silently breaks every
 time-scoped query, and it breaks it *invisibly*: the rows are there, the search runs,

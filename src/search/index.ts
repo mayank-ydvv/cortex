@@ -12,15 +12,21 @@
  * is the only way to tell a date-parsing bug from a retrieval bug when results
  * look wrong, so it is never optional.
  */
-import { getSql } from '../db/client';
+import { asUser, getSql } from '../db/client';
 import { getEmbeddingProvider } from '../ingest/embed';
 import type { CandidateFilter } from './filters';
+import type { Sql } from './sql-type';
 import { fuse, type FusedHit, type RankedHit, DEFAULT_K } from './rrf';
 import { keywordSearch } from './keyword';
 import { parseTimeRange, type TimeRange } from './time';
 import { vectorSearch } from './vector';
 
 export interface SearchOptions {
+  /**
+   * Whose corpus to search. Required for anything user-facing: without it the
+   * query runs as the table owner and row level security does not apply.
+   */
+  userId?: string;
   /** Results to return. */
   limit?: number;
   project?: string | null;
@@ -86,6 +92,11 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
 
   // Always parse, even when the range is overridden: the time phrase must be
   // stripped from the text either way or it pollutes the embedding.
+  // Refuse rather than fall back: running unscoped would execute as the table
+  // owner, where row level security does not apply and every account's chunks
+  // are visible. A missing userId is a bug, not a default.
+  if (!opts.userId) throw new Error('search requires a userId; refusing to run unscoped.');
+
   const parsed = parseTimeRange(query, now, tz);
 
   const overridden = Boolean(opts.from || opts.to);
@@ -99,15 +110,24 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
     project: opts.project ?? null,
   };
 
-  const sql = getSql();
   const embedder = getEmbeddingProvider();
   const queryEmbedding = await embedder.embedQuery(parsed.cleanedText);
 
-  // Both legs run concurrently over the same candidate set.
-  const [vectorLeg, keywordHits] = await Promise.all([
-    vectorSearch(sql, queryEmbedding, filter, depth),
-    keywordSearch(sql, parsed.cleanedText, filter, depth),
-  ]);
+  // Both legs run inside the user's own transaction, so row level security
+  // applies to the candidate set itself rather than being trusted to the
+  // WHERE clause. They run sequentially for that reason: one transaction,
+  // one role, no chance of a leg escaping the scope.
+  const { vectorLeg, keywordHits, hits } = await asUser(opts.userId!, async (tx) => {
+    const v = await vectorSearch(tx, queryEmbedding, filter, depth);
+    const k = await keywordSearch(tx, parsed.cleanedText, filter, depth);
+    const fusedInner = fuse([v.hits, k], opts.k ?? DEFAULT_K);
+    const top = fusedInner.slice(0, limit);
+    return {
+      vectorLeg: v,
+      keywordHits: k,
+      hits: top.length === 0 ? [] : await hydrate(tx, top),
+    };
+  });
 
   const fused = fuse([vectorLeg.hits, keywordHits], k);
 
@@ -140,15 +160,11 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
     warnings,
   };
 
-  const top = fused.slice(0, limit);
-  if (top.length === 0) return { hits: [], explain };
-
-  const hits = await hydrate(sql, top);
   return { hits, explain };
 }
 
 /** Fetch content and citation fields for the fused top N, preserving fused order. */
-async function hydrate(sql: ReturnType<typeof getSql>, top: FusedHit[]): Promise<SearchHit[]> {
+async function hydrate(sql: Sql, top: FusedHit[]): Promise<SearchHit[]> {
   const ids = top.map((h) => h.chunkId);
 
   const rows = await sql<

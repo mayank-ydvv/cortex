@@ -1,5 +1,6 @@
 import { checkDb, getCorpusStats, listSources, type SourceRow } from '../../../src/db/stats';
 import { SetupNotice } from '../../_components/setup-notice';
+import { requireUser } from '../../../src/auth/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,9 +20,10 @@ export default async function BrowsePage({ searchParams }: Props) {
   const db = await checkDb();
   if (!db.configured || !db.reachable) return <SetupNotice error={db.error} />;
 
+  const user = await requireUser();
   const [sources, stats] = await Promise.all([
-    listSources({ project, origin }),
-    getCorpusStats(),
+    listSources(user.id, { project, origin }),
+    getCorpusStats(user.id),
   ]);
 
   // Grouped by month so the corpus reads as a timeline rather than a flat list.

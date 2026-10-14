@@ -25,7 +25,7 @@
  * MORE candidates existed than were returned -- otherwise the window genuinely
  * holds that few rows, and warning about it would be crying wolf.
  */
-import type postgres from 'postgres';
+import type { Sql } from './sql-type';
 import type { RankedHit } from './rrf';
 import { buildWhere, type CandidateFilter } from './filters';
 
@@ -40,8 +40,14 @@ export interface VectorLegResult {
   possiblyTruncated: boolean;
 }
 
+interface Row {
+  chunk_id: number;
+  distance: number;
+  rank: number;
+}
+
 export async function vectorSearch(
-  sql: postgres.Sql,
+  sql: Sql,
   queryEmbedding: number[],
   filter: CandidateFilter,
   limit: number,
@@ -49,34 +55,32 @@ export async function vectorSearch(
   const where = buildWhere(sql, filter);
   const vec = `[${queryEmbedding.join(',')}]`;
 
-  const { rows, candidateCount } = await sql.begin(async (tx) => {
-    // SET LOCAL keeps these scoped to this transaction rather than the pooled
-    // connection, which would leak the settings to unrelated queries.
-    await tx`SET LOCAL hnsw.iterative_scan = 'relaxed_order'`;
-    await tx`SET LOCAL hnsw.ef_search = 200`;
+  // Runs inside the caller's transaction (see asUser in db/client), so SET
+  // LOCAL scopes to that and cannot leak onto the next borrower of a pooled
+  // connection. No nested begin(): the enclosing transaction is the scope we
+  // want, and postgres-js cannot nest one anyway.
+  await sql`SET LOCAL hnsw.iterative_scan = 'relaxed_order'`;
+  await sql`SET LOCAL hnsw.ef_search = 200`;
 
-    const found = await tx<{ chunk_id: number; distance: number; rank: number }[]>`
-      SELECT c.id AS chunk_id,
-             c.embedding <=> ${vec}::vector AS distance,
-             ROW_NUMBER() OVER (ORDER BY c.embedding <=> ${vec}::vector) AS rank
-      FROM chunks c
-      JOIN sources s ON s.id = c.source_id
-      WHERE ${where}
-      ORDER BY c.embedding <=> ${vec}::vector
-      LIMIT ${limit}
-    `;
+  const rows = await sql<Row[]>`
+    SELECT c.id AS chunk_id,
+           c.embedding <=> ${vec}::vector AS distance,
+           ROW_NUMBER() OVER (ORDER BY c.embedding <=> ${vec}::vector) AS rank
+    FROM chunks c
+    JOIN sources s ON s.id = c.source_id
+    WHERE ${where}
+    ORDER BY c.embedding <=> ${vec}::vector
+    LIMIT ${limit}
+  `;
 
-    // Exact count over the same predicate. This is what distinguishes "the index
-    // stopped early" from "the window only holds this many rows".
-    const [counted] = await tx<{ n: string }[]>`
-      SELECT count(*)::text AS n
-      FROM chunks c JOIN sources s ON s.id = c.source_id
-      WHERE ${where}
-    `;
-
-    return { rows: found, candidateCount: Number(counted?.n ?? 0) };
-  });
-
+  // Exact count over the same predicate. This is what distinguishes "the index
+  // stopped early" from "the window only holds this many rows".
+  const [counted] = await sql<{ n: string }[]>`
+    SELECT count(*)::text AS n
+    FROM chunks c JOIN sources s ON s.id = c.source_id
+    WHERE ${where}
+  `;
+  const candidateCount = Number(counted?.n ?? 0);
   const wanted = Math.min(limit, candidateCount);
 
   return {

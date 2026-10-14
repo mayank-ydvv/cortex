@@ -2,6 +2,7 @@ import { checkDb, getCorpusStats } from '../../../src/db/stats';
 import { SetupNotice } from '../../_components/setup-notice';
 import { ImportPanel } from '../../_components/import-panel';
 import { AlertIcon } from '../../_components/icons';
+import { requireUser } from '../../../src/auth/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +14,8 @@ export default async function StatusPage() {
   const db = await checkDb();
   if (!db.configured || !db.reachable) return <SetupNotice error={db.error} />;
 
-  const s = await getCorpusStats();
+  const user = await requireUser();
+  const s = await getCorpusStats(user.id);
   const span =
     s.earliest && s.latest
       ? Math.round((s.latest.getTime() - s.earliest.getTime()) / 86400000)

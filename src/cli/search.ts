@@ -6,6 +6,7 @@
  */
 import { Command } from 'commander';
 import { closeDb } from '../db/client';
+import { resolveUserId } from '../auth/cli-user';
 import { search, type SearchExplain, type SearchHit } from '../search/index';
 
 const program = new Command()
@@ -17,6 +18,7 @@ const program = new Command()
   .option('--to <iso>', 'override the parsed range end')
   .option('--now <iso>', 'treat this instant as now (for reproducing a past search)')
   .option('-x, --explain', 'show the date range, both ranked lists and the fusion')
+  .option('--as <email>', 'account to search (or set CORTEX_USER)')
   .parse();
 
 const opts = program.opts();
@@ -76,7 +78,9 @@ function printHits(hits: SearchHit[]) {
 }
 
 try {
+  const userId = await resolveUserId(opts.as);
   const { hits, explain } = await search(query, {
+    userId,
     limit: opts.limit,
     project: opts.project ?? null,
     from: date(opts.from),

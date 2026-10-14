@@ -8,12 +8,14 @@
 import { Command } from 'commander';
 import { answerQuestion } from '../answer/index';
 import { closeDb } from '../db/client';
+import { resolveUserId } from '../auth/cli-user';
 
 const program = new Command()
   .name('ask')
   .argument('<question...>', 'what to ask of your own history')
   .option('-s, --sources', 'list every source the answer was built from')
   .option('--now <iso>', 'treat this instant as now, for reproducing a past answer')
+  .option('--as <email>', 'account to search (or set CORTEX_USER)')
   .parse();
 
 const opts = program.opts();
@@ -23,8 +25,10 @@ const fmt = (d: Date) =>
   d.toLocaleDateString('en-GB', { dateStyle: 'medium' });
 
 try {
+  const userId = await resolveUserId(opts.as);
   const t0 = Date.now();
   const r = await answerQuestion(question, {
+    userId,
     now: opts.now ? new Date(opts.now) : undefined,
   });
 

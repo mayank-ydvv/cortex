@@ -49,6 +49,8 @@ export interface IngestSummary {
 }
 
 export interface IngestOptions {
+  /** Owner of everything this import creates. */
+  userId: string;
   origin: Origin;
   rawPath: string;
   project?: string | null;
@@ -101,7 +103,8 @@ export async function ingestConversations(
 
       const [existing] = await sql<{ id: number; content_hash: string }[]>`
         SELECT id, content_hash FROM sources
-        WHERE origin = ${opts.origin} AND external_id = ${conv.externalId}
+        WHERE user_id = ${opts.userId}
+          AND origin = ${opts.origin} AND external_id = ${conv.externalId}
       `;
 
       if (existing && existing.content_hash === hash) {
@@ -135,26 +138,29 @@ export async function ingestConversations(
         if (existing) {
           const prior = await tx<{ content_hash: string; embedding: string | null }[]>`
             SELECT content_hash, embedding::text AS embedding
-            FROM chunks WHERE source_id = ${existing.id} AND embedding IS NOT NULL
+            FROM chunks
+            WHERE source_id = ${existing.id} AND user_id = ${opts.userId}
+              AND embedding IS NOT NULL
           `;
           for (const p of prior) {
             if (p.embedding) priorEmbeddings.set(p.content_hash, p.embedding);
           }
 
-          await tx`DELETE FROM chunks WHERE source_id = ${existing.id}`;
+          await tx`DELETE FROM chunks WHERE source_id = ${existing.id} AND user_id = ${opts.userId}`;
           await tx`
             UPDATE sources
             SET title = ${conv.title}, started_at = ${conv.startedAt},
                 content_hash = ${hash}, raw_path = ${opts.rawPath},
                 imported_at = now(),
                 project = COALESCE(${opts.project ?? null}, project)
-            WHERE id = ${existing.id}
+            WHERE id = ${existing.id} AND user_id = ${opts.userId}
           `;
           sourceId = existing.id;
         } else {
           const [row] = await tx<{ id: number }[]>`
-            INSERT INTO sources (origin, external_id, title, project, started_at, raw_path, content_hash)
-            VALUES (${opts.origin}, ${conv.externalId}, ${conv.title},
+            INSERT INTO sources (user_id, origin, external_id, title, project,
+                                 started_at, raw_path, content_hash)
+            VALUES (${opts.userId}, ${opts.origin}, ${conv.externalId}, ${conv.title},
                     ${opts.project ?? null}, ${conv.startedAt}, ${opts.rawPath}, ${hash})
             RETURNING id
           `;
@@ -162,6 +168,7 @@ export async function ingestConversations(
         }
 
         const rows = chunks.map((chunk) => ({
+          user_id: opts.userId,
           source_id: sourceId,
           content: chunk.content,
           position: chunk.position,
@@ -191,7 +198,8 @@ export async function ingestConversations(
             UPDATE chunks c SET embedding = v.emb::vector
             FROM (SELECT unnest(${hashes}::text[]) AS hash,
                          unnest(${vectors}::text[]) AS emb) v
-            WHERE c.source_id = ${sourceId} AND c.content_hash = v.hash
+            WHERE c.source_id = ${sourceId} AND c.user_id = ${opts.userId}
+              AND c.content_hash = v.hash
           `;
         }
         return hashes.length;
@@ -225,14 +233,17 @@ export async function ingestConversations(
  */
 export async function embedPendingChunks(
   sql: postgres.Sql,
+  userId: string,
   summary: IngestSummary,
   log: (line: string) => void = () => {},
   batchSize = 64,
 ): Promise<void> {
   const embedder = getEmbeddingProvider();
 
+  // Scoped to one account: a shared sweep would spend this user's time
+  // embedding someone else's backlog.
   const [pendingCount] = await sql<{ count: string }[]>`
-    SELECT count(*)::text AS count FROM chunks WHERE embedding IS NULL
+    SELECT count(*)::text AS count FROM chunks WHERE embedding IS NULL AND user_id = ${userId}
   `;
   const total = Number(pendingCount?.count ?? 0);
   if (total === 0) {
@@ -245,7 +256,9 @@ export async function embedPendingChunks(
 
   for (;;) {
     const pending = await sql<{ id: number; content: string }[]>`
-      SELECT id, content FROM chunks WHERE embedding IS NULL ORDER BY id LIMIT ${batchSize}
+      SELECT id, content FROM chunks
+      WHERE embedding IS NULL AND user_id = ${userId}
+      ORDER BY id LIMIT ${batchSize}
     `;
     if (pending.length === 0) break;
 
@@ -259,7 +272,7 @@ export async function embedPendingChunks(
       UPDATE chunks c SET embedding = v.emb::vector
       FROM (SELECT unnest(${ids}::bigint[]) AS id,
                    unnest(${literals}::text[]) AS emb) v
-      WHERE c.id = v.id
+      WHERE c.id = v.id AND c.user_id = ${userId}
     `;
 
     done += pending.length;
@@ -271,7 +284,7 @@ export async function embedPendingChunks(
   process.stdout.write('\n');
 
   const [remaining] = await sql<{ count: string }[]>`
-    SELECT count(*)::text AS count FROM chunks WHERE embedding IS NULL
+    SELECT count(*)::text AS count FROM chunks WHERE embedding IS NULL AND user_id = ${userId}
   `;
   summary.chunksAwaitingEmbedding = Number(remaining?.count ?? 0);
 }

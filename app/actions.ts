@@ -4,6 +4,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { revalidatePath } from 'next/cache';
+import { requireUser } from '../src/auth/server';
 import { getSql } from '../src/db/client';
 import {
   embedPendingChunks,
@@ -57,6 +58,7 @@ const TEXT_EXT = /\.(md|markdown|txt)$/i;
  * embedding column that already makes ingest resumable.
  */
 export async function importFiles(formData: FormData): Promise<ImportResult> {
+  const user = await requireUser();
   const uploads = formData.getAll('files').filter((f): f is File => f instanceof File);
   const project = (formData.get('project') as string | null)?.trim() || null;
 
@@ -241,6 +243,7 @@ export async function importFiles(formData: FormData): Promise<ImportResult> {
     if (!f.parsed || f.parsed.conversations.length === 0) continue;
     summary ??= blank();
     const part = await ingestConversations(sql, f.parsed.conversations, {
+      userId: user.id,
       origin: f.parsed.origin,
       rawPath: f.savedTo ?? `upload://${f.name}`,
       project,
@@ -265,6 +268,7 @@ export async function importFiles(formData: FormData): Promise<ImportResult> {
 
     for (const [groupProject, convs] of byProject) {
       const part = await ingestConversations(sql, convs, {
+        userId: user.id,
         origin: 'manual',
         rawPath: 'upload://',
         project: groupProject,
@@ -299,10 +303,13 @@ export interface EmbedBatchResult {
  * minutes. Safe to call at any time — it is the same sweep `pnpm ingest` runs.
  */
 export async function embedBatch(size = 64): Promise<EmbedBatchResult> {
+  const user = await requireUser();
   const sql = getSql();
 
   const pending = await sql<{ id: number; content: string }[]>`
-    SELECT id, content FROM chunks WHERE embedding IS NULL ORDER BY id LIMIT ${size}
+    SELECT id, content FROM chunks
+    WHERE embedding IS NULL AND user_id = ${user.id}
+    ORDER BY id LIMIT ${size}
   `;
 
   if (pending.length > 0) {
@@ -314,12 +321,12 @@ export async function embedBatch(size = 64): Promise<EmbedBatchResult> {
       UPDATE chunks c SET embedding = v.emb::vector
       FROM (SELECT unnest(${ids}::bigint[]) AS id,
                    unnest(${literals}::text[]) AS emb) v
-      WHERE c.id = v.id
+      WHERE c.id = v.id AND c.user_id = ${user.id}
     `;
   }
 
   const [left] = await sql<{ n: string }[]>`
-    SELECT count(*)::text AS n FROM chunks WHERE embedding IS NULL
+    SELECT count(*)::text AS n FROM chunks WHERE embedding IS NULL AND user_id = ${user.id}
   `;
   const remaining = Number(left?.n ?? 0);
 
@@ -333,13 +340,14 @@ export async function embedBatch(size = 64): Promise<EmbedBatchResult> {
 
 /** Re-export so the status page can trigger a full sweep from the CLI path too. */
 export async function embedAll(): Promise<number> {
+  const user = await requireUser();
   const sql = getSql();
   const summary: IngestSummary = {
     sourcesInserted: 0, sourcesUpdated: 0, sourcesSkipped: 0, chunksCreated: 0,
     embeddingsReused: 0, embeddingsComputed: 0, timestampsInherited: 0,
     chunksAwaitingEmbedding: 0, errors: [],
   };
-  await embedPendingChunks(sql, summary);
+  await embedPendingChunks(sql, user.id, summary);
   revalidatePath('/status');
   return summary.embeddingsComputed;
 }
@@ -552,6 +560,7 @@ export interface FolderResult {
  * has to go rather than be tightened.
  */
 export async function indexFolder(formData: FormData): Promise<FolderResult> {
+  const user = await requireUser();
   const raw = ((formData.get('path') as string | null) ?? '').trim();
   const project = ((formData.get('project') as string | null) ?? '').trim() || null;
 
@@ -666,6 +675,7 @@ export async function indexFolder(formData: FormData): Promise<FolderResult> {
 
   for (const [groupProject, convs] of byProject) {
     const part = await ingestConversations(sql, convs, {
+      userId: user.id,
       origin: 'manual',
       rawPath: target,
       project: groupProject,
@@ -680,7 +690,7 @@ export async function indexFolder(formData: FormData): Promise<FolderResult> {
   }
 
   const [pending] = await sql<{ n: string }[]>`
-    SELECT count(*)::text AS n FROM chunks WHERE embedding IS NULL
+    SELECT count(*)::text AS n FROM chunks WHERE embedding IS NULL AND user_id = ${user.id}
   `;
 
   revalidatePath('/status');

@@ -1,7 +1,7 @@
 /**
  * Read-only queries backing the browse and status pages.
  */
-import { getSql } from './client';
+import { asUser, getSql } from './client';
 
 export interface CorpusStats {
   sources: number;
@@ -15,8 +15,8 @@ export interface CorpusStats {
   projects: string[];
 }
 
-export async function getCorpusStats(): Promise<CorpusStats> {
-  const sql = getSql();
+export async function getCorpusStats(userId: string): Promise<CorpusStats> {
+  return asUser(userId, async (sql) => {
 
   const [totals] = await sql<
     { sources: string; chunks: string; awaiting: string; earliest: Date | null; latest: Date | null }[]
@@ -58,6 +58,7 @@ export async function getCorpusStats(): Promise<CorpusStats> {
     })),
     projects: projects.map((p) => p.project),
   };
+  });
 }
 
 export interface SourceRow {
@@ -70,8 +71,11 @@ export interface SourceRow {
   firstLine: string | null;
 }
 
-export async function listSources(opts: { project?: string; origin?: string } = {}): Promise<SourceRow[]> {
-  const sql = getSql();
+export async function listSources(
+  userId: string,
+  opts: { project?: string; origin?: string } = {},
+): Promise<SourceRow[]> {
+  return asUser(userId, async (sql) => {
 
   const rows = await sql<
     {
@@ -100,6 +104,7 @@ export async function listSources(opts: { project?: string; origin?: string } = 
     chunkCount: Number(r.chunk_count),
     firstLine: r.first_line,
   }));
+  });
 }
 
 export interface DbStatus {

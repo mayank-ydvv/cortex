@@ -56,6 +56,7 @@ function buildContext(hits: SearchHit[]): string {
 }
 
 export interface AnswerOptions extends SearchOptions {
+  /** Whose corpus to answer from. Inherited from SearchOptions. */
   /** Prior turns in this thread, so a follow-up reads as a continuation. */
   history?: ChatTurn[];
   /**

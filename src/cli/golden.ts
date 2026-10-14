@@ -19,6 +19,7 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { closeDb } from '../db/client';
+import { resolveUserId } from '../auth/cli-user';
 import { search } from '../search/index';
 
 interface GoldenEntry {
@@ -57,11 +58,13 @@ async function main() {
   const path = fileURLToPath(new URL('../../tests/golden.json', import.meta.url));
   const entries: GoldenEntry[] = JSON.parse(await readFile(path, 'utf8'));
 
+  const userId = await resolveUserId(process.env.CORTEX_USER);
   const results: Scored[] = [];
 
   for (const entry of entries.filter((e) => e.category !== 'meta')) {
     // Results are chunks; scoring is per SOURCE, so map and dedupe first.
     const { hits } = await search(entry.query, {
+      userId,
       limit: AT,
       now: entry.now ? new Date(entry.now) : undefined,
     });
