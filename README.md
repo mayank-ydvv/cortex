@@ -11,7 +11,10 @@ and the date you said it.
   → the decision from last Thursday, cited — not the one from four months ago
 ```
 
-Embeddings run on your machine. Your history stays in your own database.
+Sign up, import your own history, and ask. Each account sees only its own
+memories — isolation is enforced by Postgres row-level security, not just the app.
+
+**Live:** _deploying to Vercel — link coming_
 
 ---
 
@@ -67,18 +70,19 @@ and warns when a filtered leg returns short.
 
 ## Stack
 
-TypeScript · Postgres 17 + pgvector 0.8 · Drizzle · Next.js · Vitest
+TypeScript · Next.js on Vercel · Supabase (Postgres 17 + pgvector 0.8, Auth) · Drizzle · Vitest
 
-Embeddings are **local** — `bge-small-en-v1.5` via onnxruntime, 384 dims, no API
-key and no per-query cost. Answers use any OpenAI-compatible endpoint.
+Embeddings are Gemini `gemini-embedding-001` at 768 dims; answers use
+`gemini-flash-lite` — both through Gemini's OpenAI-compatible endpoint, so one
+free key covers the whole app. Deploy steps are in [DEPLOY.md](DEPLOY.md).
 
 ## Running it
 
 ```bash
 pnpm install
-cp .env.example .env          # add your Postgres URL
+cp .env.example .env          # Postgres URL, Supabase keys, Gemini key
 pnpm migrate
-pnpm ingest ~/conversations.json
+pnpm ingest ~/conversations.json --as you@example.com
 pnpm dev                      # localhost:3000
 ```
 
