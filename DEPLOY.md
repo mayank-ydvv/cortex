@@ -40,8 +40,8 @@ After changing variables, redeploy so they take effect.
 
 Supabase → Authentication → **URL Configuration**:
 
-- **Site URL**: the production URL, e.g. `https://cortex-….vercel.app`
-- **Redirect URLs**: add `https://cortex-….vercel.app/**`
+- **Site URL**: the production URL, `https://cortex-bice-three.vercel.app`
+- **Redirect URLs**: add `https://cortex-bice-three.vercel.app/**`
 
 Without this, confirmation emails link to localhost.
 

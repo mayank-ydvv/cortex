@@ -14,7 +14,7 @@ and the date you said it.
 Sign up, import your own history, and ask. Each account sees only its own
 memories — isolation is enforced by Postgres row-level security, not just the app.
 
-**Live:** _deploying to Vercel — link coming_
+**Live:** https://cortex-bice-three.vercel.app
 
 ---
 
