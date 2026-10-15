@@ -24,7 +24,7 @@ const tsvector = customType<{ data: string }>({
   dataType: () => 'tsvector',
 });
 
-export const EMBEDDING_DIMENSIONS = 384;
+export const EMBEDDING_DIMENSIONS = 768;
 
 export const sources = pgTable(
   'sources',

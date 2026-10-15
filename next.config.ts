@@ -1,11 +1,11 @@
 import type { NextConfig } from 'next';
 
 const config: NextConfig = {
-  // onnxruntime-node ships native .node binaries. Bundling them breaks the
-  // build, so the embedding stack stays external and is required at runtime.
-  serverExternalPackages: ['@huggingface/transformers', 'onnxruntime-node', 'postgres'],
+  serverExternalPackages: ['postgres'],
   experimental: {
     // Chat exports are routinely tens of megabytes; the 1MB default rejects them.
+    // On Vercel the platform caps request bodies at ~4.5MB regardless, so the
+    // import panel sends large exports in pieces rather than relying on this.
     serverActions: { bodySizeLimit: '128mb' },
   },
 };

@@ -6,6 +6,8 @@ import { AlertIcon } from '../../_components/icons';
 import { requireUser } from '../../../src/auth/server';
 
 export const dynamic = 'force-dynamic';
+// Server actions on this page call Gemini; give them room on serverless.
+export const maxDuration = 60;
 
 const TZ = process.env.MEMORY_TZ || undefined;
 const fmt = (d: Date | null) =>
@@ -114,7 +116,7 @@ export default async function StatusPage() {
           <dt>latest</dt><dd>{fmt(s.latest)}</dd>
           <dt>projects</dt>
           <dd>{s.projects.length > 0 ? s.projects.join(', ') : '—'}</dd>
-          <dt>embedding</dt><dd>Xenova/bge-small-en-v1.5 · 384 dims · local</dd>
+          <dt>embedding</dt><dd>gemini-embedding-001 · 768 dims</dd>
           <dt>timezone</dt><dd>{process.env.MEMORY_TZ ?? 'system default'}</dd>
         </dl>
       </div>

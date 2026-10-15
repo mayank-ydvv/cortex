@@ -1,36 +1,29 @@
 /**
  * Embedding provider.
  *
- * Embeddings run locally: Xenova/bge-small-en-v1.5 via onnxruntime, 384
- * dimensions, no API key and no per-call cost.
+ * Gemini `gemini-embedding-001` over the OpenAI-compatible endpoint, truncated
+ * to 768 dimensions. Hosted rather than local because the app runs on Vercel:
+ * the previous local model (bge-small via onnxruntime) was 287MB of native
+ * binaries against a 250MB serverless function limit. This is the one-file swap
+ * the provider interface was built for.
  *
- * The provider interface exists because this will not survive a move to Vercel —
- * onnxruntime-node ships native binaries that do not run on serverless. When that
- * happens, swapping providers must stay a one-file change rather than a rewrite.
- *
- * Note that retry-with-backoff, which a hosted API would need for 429s, is absent
- * here on purpose: local inference has no rate limit and no network. An API
- * provider implementing this interface would add it internally.
+ * Changing the model invalidates every stored vector -- different models do not
+ * share a vector space -- so the switch landed alongside a migration to
+ * vector(768) on an empty corpus.
  */
-import type { FeatureExtractionPipeline } from '@huggingface/transformers';
 
-export const MODEL_ID = 'Xenova/bge-small-en-v1.5';
-export const EMBEDDING_DIMENSIONS = 384;
+export const MODEL_ID = process.env.EMBEDDING_MODEL || 'gemini-embedding-001';
+export const EMBEDDING_DIMENSIONS = 768;
 
 /**
- * The model truncates silently past this. Anything longer loses its tail with no
- * error, so the chunker must stay under it rather than relying on the model.
+ * Ceiling on a single chunk. Gemini accepts up to 2048 tokens, but the chunker
+ * splits anything over this, and its sizes were tuned for retrieval precision:
+ * smaller chunks match more precisely. Kept from the bge-small era on purpose.
  */
 export const MAX_INPUT_TOKENS = 512;
 
-/** Target size for a chunk, comfortably inside the limit. */
+/** Target size for a chunk. Unchanged by the model swap: it is a retrieval choice. */
 export const TARGET_CHUNK_TOKENS = 400;
-
-/**
- * BGE models are trained asymmetrically: queries carry this prefix, documents do
- * not. Omitting it measurably degrades retrieval quality.
- */
-export const QUERY_PREFIX = 'Represent this sentence for searching relevant passages: ';
 
 /**
  * Conservative characters-per-token estimate. Real tokenisation is unnecessary
@@ -53,42 +46,66 @@ export interface EmbeddingProvider {
   readonly id: string;
   readonly dimensions: number;
   readonly maxInputTokens: number;
-  /** Embed passages for storage. No query prefix. */
+  /** Embed passages for storage. */
   embedDocuments(texts: string[], onProgress?: (p: EmbedProgress) => void): Promise<number[][]>;
-  /** Embed a search query. Applies the BGE query prefix. */
+  /** Embed a search query. */
   embedQuery(text: string): Promise<number[]>;
 }
 
-/**
- * Batch size is about memory, not request overhead: there is no network here.
- * 32 keeps peak memory modest while still amortising the per-call cost.
- */
-const DEFAULT_BATCH_SIZE = 32;
+/** Inputs per request. Gemini accepts up to 100; fewer keeps each call quick. */
+const DEFAULT_BATCH_SIZE = 64;
 
-class LocalBgeProvider implements EmbeddingProvider {
+/** A stalled upstream must not hang an import. */
+const REQUEST_TIMEOUT_MS = 30_000;
+
+class GeminiEmbeddingProvider implements EmbeddingProvider {
   readonly id = MODEL_ID;
   readonly dimensions = EMBEDDING_DIMENSIONS;
   readonly maxInputTokens = MAX_INPUT_TOKENS;
 
-  #pipeline: Promise<FeatureExtractionPipeline> | null = null;
+  constructor(
+    private readonly apiKey = process.env.EMBEDDING_API_KEY || process.env.ANSWER_API_KEY,
+    private readonly baseUrl = process.env.EMBEDDING_BASE_URL
+      || 'https://generativelanguage.googleapis.com/v1beta/openai',
+    private readonly batchSize = DEFAULT_BATCH_SIZE,
+  ) {}
 
-  constructor(private readonly batchSize = DEFAULT_BATCH_SIZE) {}
-
-  /** Loaded once, lazily — the first call downloads the model (~34MB) and caches it. */
-  #getPipeline(): Promise<FeatureExtractionPipeline> {
-    if (!this.#pipeline) {
-      this.#pipeline = import('@huggingface/transformers').then((m) =>
-        m.pipeline('feature-extraction', MODEL_ID),
-      );
-    }
-    return this.#pipeline;
-  }
-
-  async #embed(texts: string[]): Promise<number[][]> {
+  async #embed(texts: string[], attempt = 0): Promise<number[][]> {
     if (texts.length === 0) return [];
-    const extractor = await this.#getPipeline();
-    const out = await extractor(texts, { pooling: 'mean', normalize: true });
-    return out.tolist() as number[][];
+    if (!this.apiKey) {
+      throw new Error('No embedding key configured. Set EMBEDDING_API_KEY (or ANSWER_API_KEY).');
+    }
+
+    const res = await fetch(`${this.baseUrl}/embeddings`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
+      body: JSON.stringify({ model: MODEL_ID, input: texts, dimensions: EMBEDDING_DIMENSIONS }),
+    });
+
+    // Free tiers rate-limit per minute. Back off and retry rather than failing a
+    // whole import over a burst; give up after a few attempts so a daily quota
+    // wall surfaces as an error instead of an endless wait.
+    if (res.status === 429 && attempt < 4) {
+      const body = await res.text().catch(() => '');
+      const hinted = Number(/retry in ([\d.]+)s/i.exec(body)?.[1]);
+      const wait = Number.isFinite(hinted) ? hinted * 1000 : 2 ** attempt * 2000;
+      await new Promise((r) => setTimeout(r, Math.min(wait, 60_000)));
+      return this.#embed(texts, attempt + 1);
+    }
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`Embedding request failed (${res.status}): ${body.slice(0, 200)}`);
+    }
+
+    const json = (await res.json()) as { data?: { embedding: number[]; index: number }[] };
+    const data = json.data ?? [];
+    if (data.length !== texts.length) {
+      throw new Error(`Embedding returned ${data.length} vectors for ${texts.length} inputs.`);
+    }
+    // Order by index explicitly rather than trusting response order.
+    return [...data].sort((a, b) => a.index - b.index).map((d) => d.embedding);
   }
 
   async embedDocuments(
@@ -105,7 +122,7 @@ class LocalBgeProvider implements EmbeddingProvider {
   }
 
   async embedQuery(text: string): Promise<number[]> {
-    const [vector] = await this.#embed([QUERY_PREFIX + text]);
+    const [vector] = await this.#embed([text]);
     if (!vector) throw new Error('embedQuery produced no vector');
     return vector;
   }
@@ -113,8 +130,8 @@ class LocalBgeProvider implements EmbeddingProvider {
 
 let shared: EmbeddingProvider | null = null;
 
-/** The process-wide provider. Shared so the model is loaded only once. */
+/** The process-wide provider. */
 export function getEmbeddingProvider(): EmbeddingProvider {
-  shared ??= new LocalBgeProvider();
+  shared ??= new GeminiEmbeddingProvider();
   return shared;
 }

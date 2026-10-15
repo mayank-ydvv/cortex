@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from 'react';
 import { embedBatch, importFiles, indexFolder, type FolderResult, type ImportResult } from '../actions';
 import { AlertIcon } from './icons';
+import { batchBySize, prepareUploads } from './split-upload';
 
 /**
  * Upload and import.
@@ -53,7 +54,18 @@ export function ImportPanel({
     const data = new FormData(e.currentTarget);
     startUpload(async () => {
       try {
-        const r = await importFiles(data);
+        // Hosted request bodies are capped (~4.5MB on Vercel), so large exports
+        // are split in the browser and sent as several ordinary imports.
+        const chosen = data.getAll('files').filter((f): f is File => f instanceof File && f.size > 0);
+        const project = (data.get('project') as string | null) ?? '';
+        const batches = batchBySize(await prepareUploads(chosen));
+        let r: ImportResult = { files: [], summary: null, pendingEmbeddings: 0 };
+        for (const batch of batches) {
+          const part = new FormData();
+          for (const f of batch) part.append('files', f);
+          part.append('project', project);
+          r = mergeResults(r, await importFiles(part));
+        }
         setResult(r);
         setPending(r.pendingEmbeddings);
         formRef.current?.reset();
@@ -367,4 +379,26 @@ function ImportReport({ result }: { result: ImportResult }) {
       ))}
     </div>
   );
+}
+
+/** Combine the results of several import requests into one report. */
+function mergeResults(a: ImportResult, b: ImportResult): ImportResult {
+  let summary = a.summary;
+  if (b.summary) {
+    summary = summary
+      ? {
+          sourcesInserted: summary.sourcesInserted + b.summary.sourcesInserted,
+          sourcesUpdated: summary.sourcesUpdated + b.summary.sourcesUpdated,
+          sourcesSkipped: summary.sourcesSkipped + b.summary.sourcesSkipped,
+          chunksCreated: summary.chunksCreated + b.summary.chunksCreated,
+          embeddingsReused: summary.embeddingsReused + b.summary.embeddingsReused,
+          embeddingsComputed: summary.embeddingsComputed + b.summary.embeddingsComputed,
+          timestampsInherited: summary.timestampsInherited + b.summary.timestampsInherited,
+          chunksAwaitingEmbedding: b.summary.chunksAwaitingEmbedding,
+          errors: [...summary.errors, ...b.summary.errors],
+        }
+      : b.summary;
+  }
+  // The pending count is a snapshot, so the latest one is the true total.
+  return { files: [...a.files, ...b.files], summary, pendingEmbeddings: b.pendingEmbeddings };
 }

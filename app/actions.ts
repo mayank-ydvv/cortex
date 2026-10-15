@@ -2,7 +2,7 @@
 
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '../src/auth/server';
 import { getSql } from '../src/db/client';
@@ -278,7 +278,7 @@ export async function importFiles(formData: FormData): Promise<ImportResult> {
   }
 
   const [pending] = await sql<{ n: string }[]>`
-    SELECT count(*)::text AS n FROM chunks WHERE embedding IS NULL
+    SELECT count(*)::text AS n FROM chunks WHERE embedding IS NULL AND user_id = ${user.id}
   `;
 
   revalidatePath('/status');
@@ -353,8 +353,11 @@ export async function embedAll(): Promise<number> {
 }
 
 
-/** Directory for downloaded archives. Kept so a single-use link is never spent twice. */
-const EXPORT_DIR = '.exports';
+/**
+ * Directory for downloaded archives, kept so a single-use link is never spent
+ * twice. The OS temp dir, because serverless filesystems are read-only outside it.
+ */
+const EXPORT_DIR = join(tmpdir(), 'cortex-exports');
 
 /** Summarise an archive's contents and report the conversation file's structure. */
 function describeArchive(

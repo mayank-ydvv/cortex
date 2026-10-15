@@ -1,51 +1,56 @@
-# Deploying Cortex to Railway
+# Deploying Cortex to Vercel
 
-Railway runs a container rather than serverless functions, which is why this
-app goes there and not to Vercel: the embedding model is 287MB of native
-`onnxruntime` binaries and needs a long-lived process with a real filesystem.
-Vercel's function limit is 250MB and has neither.
+Cortex runs on Vercel as an ordinary Next.js app. Embeddings and answers both
+come from Gemini over HTTP, so nothing heavy ships in the functions. The
+database and sign-in are Supabase.
 
-## 1. Create the project
+## 1. Project
 
-1. Go to **https://railway.com/new**
-2. **Deploy from GitHub repo** → authorise Railway → pick **mayank-ydvv/cortex**
-3. Railway detects Next.js and starts a first build. It will fail until the
-   variables below are set — that is expected.
+Vercel → **Add New → Project** → import **mayank-ydvv/cortex**. Framework
+preset is Next.js; the defaults are right (pnpm is detected from the lockfile).
 
-## 2. Set variables
+## 2. Environment variables
 
-Project → **Variables** → paste these. Values marked *secret* come from your
-local `.env`; never commit them.
+Project → Settings → **Environment Variables**. Values marked *secret* come
+from your own `.env`; never commit them.
 
 | Variable | Value |
 |---|---|
-| `DATABASE_URL` | *secret* — the Supabase session pooler URL (port 5432) |
-| `NEXT_PUBLIC_SUPABASE_URL` | `https://jaakijfmbmljzpixxbsq.supabase.co` |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the publishable key from `.env` |
-| `ANSWER_API_KEY` | *secret* — your Gemini key |
+| `DATABASE_URL` | *secret* — Supabase **transaction pooler** URL (port **6543**) |
+| `ANSWER_API_KEY` | *secret* — your Gemini key (also used for embeddings) |
 | `ANSWER_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai` |
 | `ANSWER_MODEL` | `gemini-flash-lite-latest` |
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://jaakijfmbmljzpixxbsq.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the publishable key |
 | `MEMORY_TZ` | `Asia/Calcutta` |
 
-**Do not set `CORTEX_LOCAL`.** It enables indexing a folder from the
-filesystem, which on a server reads the container rather than anyone's machine.
-The feature disables itself without it.
+**Port 6543 on Vercel, 5432 locally.** Serverless functions open many short-lived
+connections; the transaction pooler is built for that, and the app already
+disables prepared statements and keeps all per-user state inside transactions,
+which is what transaction mode requires. Run `pnpm migrate` from your machine
+against the session pooler (5432), never from Vercel.
 
-## 3. Generate a domain
+**Do not set `CORTEX_LOCAL`.** It enables indexing a folder from the server's
+own filesystem, which is meaningless on a hosted function. The option hides
+itself without it.
 
-Settings → **Networking** → **Generate Domain**. That URL is the live app.
+After changing variables, redeploy so they take effect.
 
-## 4. Point Supabase at it
+## 3. Point Supabase Auth at the site
 
-Supabase dashboard → Authentication → URL Configuration → add the Railway URL
-to **Site URL** and **Redirect URLs**, or email confirmation links will send
-people to localhost.
+Supabase → Authentication → **URL Configuration**:
 
-## Notes
+- **Site URL**: the production URL, e.g. `https://cortex-….vercel.app`
+- **Redirect URLs**: add `https://cortex-….vercel.app/**`
 
-- **First request after a deploy is slow** (~30s). The embedding model
-  downloads once on cold start, then stays in memory.
-- **Memory**: the model needs roughly 500MB resident. Railway's starter
-  container is 512MB–1GB; if the process is killed, raise the limit.
-- **Cost**: Railway's free trial covers this; after that it is usage-based.
-  The database stays on Supabase's free tier.
+Without this, confirmation emails link to localhost.
+
+## Limits worth knowing
+
+- **Uploads**: Vercel caps a request at ~4.5MB. The import panel opens large
+  `.json`/`.zip` exports in the browser and sends them in pieces, so a 50MB
+  Claude export still works. Other files (PDF, DOCX) must be under 3.5MB each.
+- **Gemini free tier** rate-limits embeddings per minute and per day. A large
+  first import may pause on 429s; if it stops, the remaining chunks stay
+  "awaiting embedding" and the status page resumes them.
+- **Function time**: the ask and status pages allow 60s per action.

@@ -2,9 +2,9 @@
 
 A personal "second brain" over my AI chat history (Claude, ChatGPT) and my own notes.
 It ingests exported conversations into Postgres, chunks them by conversation turn,
-embeds them locally, and answers questions about my past decisions with cited results.
-Ingestion is a CLI command; search is a local web UI. Runs on localhost only — a Vercel
-deploy is planned but not yet done, so there is deliberately no auth.
+embeds them, and answers questions about my past decisions with cited results.
+Each user signs in (Supabase Auth) and imports their own history from the web UI or
+the CLI. Deployed on Vercel; see DEPLOY.md.
 
 ## Retrieval strategy: three legs
 
@@ -55,21 +55,20 @@ Three consequences that are easy to get wrong:
 
 ## Embeddings
 
-Local, no API key, no cost. `Xenova/bge-small-en-v1.5` via `@huggingface/transformers`
-(onnxruntime), **384 dimensions**. Measured ~2.75ms per input on an M4.
+Hosted: Gemini `gemini-embedding-001` over the OpenAI-compatible endpoint, truncated
+to **768 dimensions** (`src/ingest/embed.ts`). It reuses `ANSWER_API_KEY` unless
+`EMBEDDING_API_KEY` is set.
 
-Two constraints this imposes:
+It was local bge-small (384 dims, onnxruntime) until the Vercel deploy: onnxruntime's
+native binaries are 287MB against a 250MB serverless function limit. Migration 0004
+moved the column to `vector(768)` and cleared old vectors so the normal
+"awaiting embedding" sweep recomputes them.
 
-- **512-token input limit.** Chunks target ~400 tokens, not the 1500 an API model would
-  allow. Anything longer is silently truncated by the model, so the chunker must not
-  exceed it. Smaller chunks also match more precisely, so this is not purely a cost.
-- **BGE models want an asymmetric prefix.** Queries are prefixed with
-  `"Represent this sentence for searching relevant passages: "`; documents are not.
-  Skipping this measurably degrades retrieval.
+Chunks still target ~400 tokens with a 512 ceiling. Gemini accepts more, but those
+sizes are a retrieval-precision choice, not a model limit, so they were kept.
 
-Embedding sits behind a provider interface in `src/ingest/embed.ts`. This matters: a
-Vercel deploy cannot run `onnxruntime-node`, which ships native binaries. Swapping
-providers must stay a one-file change.
+Free-tier Gemini rate-limits per minute; the provider backs off on 429 and gives up
+after a few attempts so a daily quota wall surfaces as an error.
 
 > **Changing the embedding model invalidates every stored vector.** Dimensions, and the
 > vector space itself, are model-specific. A model change means a schema migration and
@@ -87,7 +86,7 @@ src/
     index.ts                 orchestrator: hash -> diff -> chunk -> embed -> report
     parsers/                 claude.ts, chatgpt.ts, manual.ts, detect.ts, types.ts
     chunk.ts                 turn-based splitting, carries role + timestamp
-    embed.ts                 provider interface + local bge-small, batched
+    embed.ts                 provider interface + Gemini embeddings, batched
   search/
     index.ts                 search(query, options)
     time.ts                  parseTimeRange()    <- unit tested
@@ -145,9 +144,15 @@ bypass the parser, which isolates parser bugs from retrieval bugs.
 | Variable | Required | Notes |
 |---|---|---|
 | `DATABASE_URL` | yes | Supabase session pooler (**5432**) or direct. The transaction pooler on 6543 breaks prepared statements and will fail migrations. |
+| `ANSWER_API_KEY` | yes | Gemini key; used for answers and, by default, embeddings. |
+| `ANSWER_BASE_URL` / `ANSWER_MODEL` | yes | OpenAI-compatible endpoint and chat model. |
+| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Supabase Auth. |
+| `EMBEDDING_API_KEY` / `EMBEDDING_MODEL` | no | Override the embedding key or model. A model change needs a migration. |
+| `CORTEX_LOCAL` | no | `true` only on your own machine: enables indexing a local folder. Never on Vercel. |
 | `MEMORY_TZ` | no | IANA zone for resolving date expressions. Defaults to system timezone. |
 
-No API keys. Embeddings are local.
+Hosted uploads are capped at ~4.5MB per request, so the import panel splits large
+exports in the browser (`app/_components/split-upload.ts`) into several valid exports.
 
 ## Accounts and isolation
 
